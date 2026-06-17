@@ -1,0 +1,14 @@
+{"task":"Call the dentist","category":"phone","completed_at":"2026-06-16T09:12:00Z","sat_for_hours":52,"orchestrator":"found the number and opening hours"}
+{"task":"Cancel the gym membership","category":"admin","completed_at":"2026-06-15T17:40:00Z","sat_for_hours":121,"orchestrator":"located the cancellation form"}
+{"task":"Book the car service","category":"phone","completed_at":"2026-06-15T11:05:00Z","sat_for_hours":40,"orchestrator":null}
+{"task":"Renew the library card","category":"admin","completed_at":"2026-06-14T15:22:00Z","sat_for_hours":18,"orchestrator":null}
+{"task":"Sort the insurance email","category":"admin","completed_at":"2026-06-13T20:01:00Z","sat_for_hours":64,"orchestrator":null}
+{"task":"Ring the landlord re: heating","category":"phone","completed_at":"2026-06-12T10:18:00Z","sat_for_hours":33,"orchestrator":null}
+{"task":"Return the package","category":"errand","completed_at":"2026-06-16T14:30:00Z","sat_for_hours":28,"orchestrator":null}
+{"task":"Pick up the prescription","category":"errand","completed_at":"2026-06-14T12:00:00Z","sat_for_hours":9,"orchestrator":null}
+{"task":"Buy a birthday gift for mum","category":"errand","completed_at":"2026-06-11T16:45:00Z","sat_for_hours":70,"orchestrator":"shortlisted three gifts in budget"}
+{"task":"Unload the dishwasher","category":"chore","completed_at":"2026-06-16T08:00:00Z","sat_for_hours":14,"orchestrator":null}
+{"task":"Fix the kitchen drawer","category":"chore","completed_at":"2026-06-15T19:30:00Z","sat_for_hours":300,"orchestrator":null}
+{"task":"Take out the recycling","category":"chore","completed_at":"2026-06-14T07:50:00Z","sat_for_hours":30,"orchestrator":null}
+{"task":"Wipe the kitchen counters","category":"chore","completed_at":"2026-06-13T21:10:00Z","sat_for_hours":20,"orchestrator":null}
+{"task":"Water the plants","category":"chore","completed_at":"2026-06-12T18:00:00Z","sat_for_hours":16,"orchestrator":null}

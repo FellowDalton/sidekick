@@ -8,3 +8,7 @@ chrome-extension/sidekick-render.js
 
 # atomic-write temp files
 *.tmp
+
+# python bytecode
+__pycache__/
+*.pyc

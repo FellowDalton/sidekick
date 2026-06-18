@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# sidekick — one front door for the vault's tools. Pure dispatch; nothing lives here.
+set -euo pipefail
+
+# resolve our own directory, following symlinks (so it works when symlinked onto PATH)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [ "${SOURCE#/}" = "$SOURCE" ] && SOURCE="$DIR/$SOURCE"
+done
+DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
+
+usage() {
+  cat <<'EOF'
+sidekick — vault commands
+
+  sidekick new "<title>" --category <phone|admin|errand|chore>
+  sidekick set-plan <id> [--file plan.json]      (omit --file to read stdin)
+  sidekick complete <id>
+  sidekick regenerate
+
+  sidekick nudge [--dry-run]                      decide + send (or just print)
+  sidekick nudge-test "<text>"                    channel check
+  sidekick find-chat "<query>"                    list chat ids
+  sidekick nudge-install [HOUR MINUTE]            schedule the daily nudge (default 9 0)
+
+  sidekick setup                                  one-shot bring-up
+  sidekick help
+EOF
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  new|set-plan|complete|regenerate)  exec python3 "$DIR/sidekick.py" "$cmd" "$@" ;;
+  nudge)                             exec python3 "$DIR/nudge.py" run "$@" ;;
+  nudge-test)                        exec python3 "$DIR/nudge.py" test "$@" ;;
+  find-chat)                         exec python3 "$DIR/nudge.py" find-chat "$@" ;;
+  nudge-install)                     exec "$DIR/install-nudge.sh" "$@" ;;
+  setup)                             exec "$DIR/setup.sh" "$@" ;;
+  help|-h|--help)                    usage ;;
+  *) echo "sidekick: unknown command '$cmd'" >&2; echo >&2; usage >&2; exit 2 ;;
+esac

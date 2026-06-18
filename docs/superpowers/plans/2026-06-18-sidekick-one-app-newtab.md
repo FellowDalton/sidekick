@@ -28,7 +28,7 @@
 sidekick/                         (vault root = git repo, branch feat/one-app-newtab)
 ├── sidekick.py                   EDITED (Task 3) — regenerate mirrors feed+render into chrome-extension/
 ├── ledger.jsonl                  unchanged
-├── tasks/*.md                    unchanged (may be empty)
+├── tasks/*.md                    SEEDED (Task 2.5) — 4 demo tasks backing the active list
 ├── sidekick-render.js            NEW (Task 1) — the single render brain
 ├── sidekick-data.js              generated; unchanged format (window.SIDEKICK)
 ├── sidekick.html                 EDITED (Task 1) — thin shell, foot-note fixed
@@ -260,6 +260,106 @@ git commit -m "$(printf 'feat: chrome-extension/ shell (manifest + newtab) and .
 
 ---
 
+### Task 2.5: Seed the four demo tasks
+
+Create the `tasks/*.md` files that back the four sample active tasks, so that once `regenerate` rebuilds the feed from real files (Task 3) the "In front of you" list stays populated instead of going empty. These reproduce the active entries currently hard-coded in `sidekick-data.js`. Deliverable: `read_active()` returns the four tasks with their plans.
+
+**Files:**
+- Create: `tasks/20260613-sort-the-car-insurance-renewal.md`
+- Create: `tasks/20260616-book-the-kids-dentist-check-up.md`
+- Create: `tasks/20260609-replace-the-bathroom-extractor-fan.md`
+- Create: `tasks/20260615-renew-your-passport.md`
+
+**Interfaces:**
+- Consumes: nothing from other tasks (frontmatter schema is in `sidekick.py`'s `read_active`/`read_note`).
+- Produces: four open task files. `read_active()` returns them sorted longest-sitting first; three carry a `plan`, the passport one does not. Task 3 regenerates the feed from these.
+
+- [ ] **Step 1: Create the four task files (exact content)**
+
+`tasks/20260613-sort-the-car-insurance-renewal.md`:
+```markdown
+---
+category: admin
+created: 2026-06-13T10:00:00Z
+status: open
+plan:
+  summary: Compared three renewal quotes — your current insurer is no longer the cheapest.
+  steps:
+    - text: Call Topdanmark on 70 11 50 50 and ask them to match the lower quote
+      href: tel:+4570115050
+    - text: If they won't match, switch to the Alm. Brand quote
+      href: https://www.almbrand.dk
+    - text: Cancel the old direct debit once the switch confirms
+---
+
+# Sort the car insurance renewal
+```
+
+`tasks/20260616-book-the-kids-dentist-check-up.md`:
+```markdown
+---
+category: phone
+created: 2026-06-16T12:00:00Z
+status: open
+plan:
+  summary: Found the clinic's online booking — two slots open next week.
+  steps:
+    - text: Open the booking page
+      href: https://example-dentist.dk/book
+    - text: Take the Tuesday 15:30 slot
+    - text: Add it to the family calendar
+---
+
+# Book the kids' dentist check-up
+```
+
+`tasks/20260609-replace-the-bathroom-extractor-fan.md`:
+```markdown
+---
+category: chore
+created: 2026-06-09T20:00:00Z
+status: open
+plan:
+  summary: Shortlisted two fans that fit a 100 mm duct, both under 400 kr.
+  steps:
+    - text: Measure the existing duct to confirm it's 100 mm
+    - text: Order the Vortice Punto
+      href: https://example.com/vortice-punto
+    - text: Book the handyman for fitting
+---
+
+# Replace the bathroom extractor fan
+```
+
+`tasks/20260615-renew-your-passport.md`:
+```markdown
+---
+category: admin
+created: 2026-06-15T16:00:00Z
+status: open
+---
+
+# Renew your passport
+```
+
+- [ ] **Step 2: Verify `read_active()` returns the four tasks (write-free check)**
+
+Run (imports the module to call `read_active()` in-process — no files written):
+```bash
+cd /Users/dalton/projects/sidekick && python3 -c "import sidekick, json; a=sidekick.read_active(); print(len(a)); [print('-', t['task'], '| plan:', bool(t['plan'])) for t in a]"
+```
+Expected: `4`, then four lines — the extractor fan and car-insurance tasks first (longest-sitting), passport showing `plan: False`, the other three `plan: True`. If parsing fails, a YAML error will surface — re-check the frontmatter indentation.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /Users/dalton/projects/sidekick
+git add tasks/
+git commit -m "$(printf 'feat: seed the four demo tasks backing the active list\n\nReal tasks/*.md (with plans) for the sample active tasks, so regenerate\nrebuilds a populated In-front-of-you list instead of emptying it. These\nreplace the hand-authored active entries that had no backing files.\n\nCo-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>')"
+```
+
+---
+
 ### Task 3: Wire `regenerate` to mirror the feed + render brain into the extension
 
 Replace `regenerate`'s old conditional `sidekick-data.json` branch with an atomic copy of both moving files into `chrome-extension/`. This is the keystone: it makes every new tab live. Test-first with stdlib `unittest`.
@@ -269,7 +369,7 @@ Replace `regenerate`'s old conditional `sidekick-data.json` branch with an atomi
 - Modify: `sidekick.py` (add `import shutil`; add `RENDER_JS` path constant near line 47; replace the extension branch in `regenerate()` at lines 184–190)
 
 **Interfaces:**
-- Consumes: `chrome-extension/` (Task 2); `sidekick-render.js` (Task 1).
+- Consumes: `chrome-extension/` (Task 2); `sidekick-render.js` (Task 1); the seeded `tasks/*.md` (Task 2.5), so the regenerated feed has 4 active tasks.
 - Produces: after `regenerate`, `chrome-extension/sidekick-data.js` and `chrome-extension/sidekick-render.js` exist and are byte-identical to their root sources (when those sources exist and the folder is present).
 
 - [ ] **Step 1: Write the failing test**

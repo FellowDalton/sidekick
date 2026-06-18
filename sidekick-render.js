@@ -27,7 +27,7 @@ const BRANCH_CURVE  = { base:2, step:1 };
 const LEVEL_WORDS = ["Getting started","Finding the rhythm","Warmed up","In the swing","Hitting stride","On a roll","Dialled in","Unstoppable"];
 const esc = s => String(s).replace(/[&<>"]/g, c=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
 const fmtDate = iso => new Date(iso).toLocaleDateString(undefined,{month:"short",day:"numeric"});
-const dur = h => h==null ? "" : (h<24 ? Math.round(h)+"h" : Math.round(h/24)+"d");
+const dur = h => h<24 ? Math.round(h)+"h" : Math.round(h/24)+"d";
 function ago(iso){ const h=Math.round((Date.now()-new Date(iso))/36e5); if(h<1)return"just now"; if(h<24)return h+"h ago"; return Math.round(h/24)+"d ago"; }
 
 /* ── render ────────────────────────────────────────────────────────────── */

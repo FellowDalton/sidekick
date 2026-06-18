@@ -1,0 +1,8 @@
+{
+  "access_token": "PASTE_YOUR_BEEPER_TOKEN_HERE",
+  "chat_id": "PASTE_CHAT_ID_FROM_find-chat",
+  "min_sat_hours": 24,
+  "use_claude": true,
+  "claude_cmd": ["claude", "-p"],
+  "claude_timeout_sec": 60
+}

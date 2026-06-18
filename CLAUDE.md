@@ -1,0 +1,63 @@
+# Sidekick — operating notes for Claude Code
+
+Everything lives in this vault (one git repo). No Google, no OAuth, no API.
+- `tasks/*.md` — open tasks, one markdown file each, metadata in YAML frontmatter (category, created, status, plan). Editable by hand in Obsidian.
+- `ledger.jsonl` — completed tasks, append-only, the game's spine. **Code writes it; never hand-edit, never let the model rewrite it.**
+- `sidekick-data.js` — generated feed the dashboard reads. **Never hand-edit.**
+- `sidekick-render.js` — the dashboard's render logic, shared by `sidekick.html` and the Chrome new tab. Static. `regenerate` copies it (with the feed) into `chrome-extension/`.
+- `sidekick.html` — the view. Static. Never regenerated.
+
+`sidekick.py` is the only thing that touches the data, and it is deterministic — no model reasoning in it. One dependency: `pip install pyyaml`.
+
+## The one rule
+**Run `python sidekick.py regenerate` after any change.** It rebuilds `sidekick-data.js` from the task files + ledger.
+
+## Routine
+| When | Command |
+|---|---|
+| New task (Sunday dump or ad-hoc) | `python sidekick.py new "<title>" --category <phone\|admin\|errand\|chore>` |
+| You researched a task → save the plan | compose `{summary, steps:[{text, href?}]}`, then `python sidekick.py set-plan <id> --file plan.json` (or pipe JSON on stdin) |
+| Task done | `python sidekick.py complete <id>` (appends to ledger, sets status: done) |
+| Just refresh the view | `python sidekick.py regenerate` |
+| Day-to-day shorthand | `sidekick <cmd>` wraps these (`sidekick help`); `./setup.sh` does first-time bring-up |
+
+`new`, `set-plan`, and `complete` each call `regenerate` for you. `<id>` is the task filename without `.md`.
+
+## The orchestrator step (the only model-driven part)
+When a task needs research, *you* (the model) do the legwork, then:
+1. write the worked-out steps as a plan and persist with `set-plan` (structured → frontmatter → dashboard);
+2. drop the raw research prose into `raw/` (seeds the future wiki, §6 Layer 2).
+The plan is data; the research is prose. Don't make one reverse-engineer the other.
+
+## Don't
+- Don't edit `sidekick-data.js` by hand — it's generated.
+- Don't write to `ledger.jsonl` except via `complete`.
+- Don't complete tasks from the dashboard — it's read-only by design.
+
+---
+
+## The nudge — the active push (§8, the load-bearing piece)
+
+`nudge.py` is fired by **launchd** (not Claude Code — a session can't push itself). It reads the vault, decides whether to nudge, and sends one message to you via Beeper → iMessage. Claude judges and words it; if the Claude call fails, a deterministic fallback still sends (longest-sitting task with a plan → its first step). It stays silent when nothing's genuinely stalled.
+
+### One-time setup
+1. In Beeper Desktop: **Settings → Integrations → Approved connections → +** → create a token.
+2. `cp nudge.config.example.json nudge.config.json` and paste the token in.
+3. Make sure you have a self / Note-to-Self chat in Beeper (text yourself once if needed), then `python nudge.py find-chat "<your name>"` and paste the chat `id` into the config.
+4. `python nudge.py run --dry-run` — decides + prints, sends nothing. Then `python nudge.py test "hi"` — confirms the channel actually delivers to your phone.
+5. `./install-nudge.sh 9 0` — schedules it daily at 09:00.
+
+### Commands
+| | |
+|---|---|
+| `python nudge.py run` | decide + send (what launchd runs) |
+| `python nudge.py run --dry-run` | decide + print, send nothing |
+| `python nudge.py find-chat "<query>"` | list chat ids to find your self-chat |
+| `python nudge.py test "<text>"` | send a literal message (channel check) |
+
+### Knobs (nudge.config.json)
+`min_sat_hours` (don't nudge about anything fresher) · `use_claude` (false = deterministic only) · `claude_cmd` · `claude_timeout_sec`.
+
+### Honest limits
+- Requires the **Mac awake and Beeper Desktop running** — that's the reliability hole. If the lid's shut at 9am it fires at next wake, not 9am.
+- The agent's `python3` needs `pyyaml`; `claude` needs to be on the agent's PATH (the installer captures your current PATH, but verify with a dry run). Failures fall back and are logged to `nudge.log`.

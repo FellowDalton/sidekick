@@ -1,0 +1,10 @@
+# secrets & logs
+nudge.config.json
+nudge.log
+
+# generated copies mirrored into the extension by `sidekick.py regenerate`
+chrome-extension/sidekick-data.js
+chrome-extension/sidekick-render.js
+
+# atomic-write temp files
+*.tmp

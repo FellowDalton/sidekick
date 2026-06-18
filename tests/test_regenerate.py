@@ -20,7 +20,7 @@ class RegenerateExtensionSync(unittest.TestCase):
 
             env = {**os.environ, "SIDEKICK_VAULT": str(vault)}
             subprocess.run([sys.executable, str(SCRIPT), "regenerate"],
-                           check=True, env=env, cwd=d)
+                           check=True, env=env, cwd=d, stdout=subprocess.DEVNULL)
 
             ext = vault / "chrome-extension"
             self.assertTrue((ext / "sidekick-data.js").exists(), "feed not mirrored")
@@ -39,7 +39,7 @@ class RegenerateExtensionSync(unittest.TestCase):
             (vault / "sidekick-render.js").write_text("/* x */\n", encoding="utf-8")
             env = {**os.environ, "SIDEKICK_VAULT": str(vault)}
             subprocess.run([sys.executable, str(SCRIPT), "regenerate"],
-                           check=True, env=env, cwd=d)
+                           check=True, env=env, cwd=d, stdout=subprocess.DEVNULL)
             self.assertTrue((vault / "sidekick-data.js").exists())
             self.assertFalse((vault / "chrome-extension").exists())
 

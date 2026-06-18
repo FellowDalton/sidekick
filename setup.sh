@@ -35,7 +35,7 @@ else
     python3 - "$DIR/nudge.config.json" "$token" <<'PY'
 import json, sys
 p, token = sys.argv[1], sys.argv[2]
-cfg = json.load(open(p)); cfg["token"] = token
+cfg = json.load(open(p)); cfg["access_token"] = token
 json.dump(cfg, open(p, "w"), indent=2); print("  Token saved.")
 PY
     q="$(ask 'Your name to find your self-chat (blank to skip):')"

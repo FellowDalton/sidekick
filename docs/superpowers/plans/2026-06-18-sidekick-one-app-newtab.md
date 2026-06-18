@@ -26,23 +26,23 @@
 
 ```
 sidekick/                         (vault root = git repo, branch feat/one-app-newtab)
-├── sidekick.py                   EDITED (Task 3) — regenerate mirrors feed+render into chrome-extension/
+├── sidekick.py                   EDITED (Task 4) — regenerate mirrors feed+render into chrome-extension/
 ├── ledger.jsonl                  unchanged
-├── tasks/*.md                    SEEDED (Task 2.5) — 4 demo tasks backing the active list
+├── tasks/*.md                    SEEDED (Task 3) — 4 demo tasks backing the active list
 ├── sidekick-render.js            NEW (Task 1) — the single render brain
 ├── sidekick-data.js              generated; unchanged format (window.SIDEKICK)
 ├── sidekick.html                 EDITED (Task 1) — thin shell, foot-note fixed
 ├── chrome-extension/             NEW (Task 2)
 │   ├── manifest.json             committed (moved from root)
 │   ├── newtab.html               committed thin shell (Task 2)
-│   ├── sidekick-render.js        generated copy (Task 3); git-ignored
-│   └── sidekick-data.js          generated copy (Task 3); git-ignored
-├── sidekick                      NEW (Task 4) — command wrapper, +x
-├── setup.sh                      NEW (Task 5) — one-shot bring-up, +x
-├── tests/test_regenerate.py      NEW (Task 3) — stdlib unittest
+│   ├── sidekick-render.js        generated copy (Task 4); git-ignored
+│   └── sidekick-data.js          generated copy (Task 4); git-ignored
+├── sidekick                      NEW (Task 5) — command wrapper, +x
+├── setup.sh                      NEW (Task 6) — one-shot bring-up, +x
+├── tests/test_regenerate.py      NEW (Task 4) — stdlib unittest
 ├── .gitignore                    NEW (Task 2)
-├── nudge.py / install-nudge.sh / nudge.config.example.json   unchanged (committed in Task 6)
-├── README.md / CLAUDE.md         EDITED (Task 6)
+├── nudge.py / install-nudge.sh / nudge.config.example.json   unchanged (committed in Task 7)
+├── README.md / CLAUDE.md         EDITED (Task 7)
 └── docs/superpowers/{specs,plans}/…   this plan + the spec
 ```
 
@@ -158,7 +158,7 @@ git commit -m "$(printf 'refactor: extract shared render brain into sidekick-ren
 
 ### Task 2: Chrome extension folder (static files) + cleanup + gitignore
 
-Create the self-contained `chrome-extension/` folder with the only two hand-written files (`manifest.json`, `newtab.html`), remove the misplaced loose root files, and add a `.gitignore`. Deliverable: a loadable extension shell (it will show the "no feed yet" fallback until Task 3 supplies the data — that's expected and verified here).
+Create the self-contained `chrome-extension/` folder with the only two hand-written files (`manifest.json`, `newtab.html`), remove the misplaced loose root files, and add a `.gitignore`. Deliverable: a loadable extension shell (it will show the "no feed yet" fallback until Task 4 supplies the data — that's expected and verified here).
 
 **Files:**
 - Create: `chrome-extension/manifest.json` (moved from root `manifest.json`)
@@ -168,7 +168,7 @@ Create the self-contained `chrome-extension/` folder with the only two hand-writ
 
 **Interfaces:**
 - Consumes: `sidekick.html` from Task 1 (copied as the shell, so it already loads `sidekick-data.js` + `sidekick-render.js`).
-- Produces: `chrome-extension/` containing `manifest.json` (MV3, `chrome_url_overrides.newtab → newtab.html`) and `newtab.html` (thin shell). Task 3 fills the folder with the two generated files.
+- Produces: `chrome-extension/` containing `manifest.json` (MV3, `chrome_url_overrides.newtab → newtab.html`) and `newtab.html` (thin shell). Task 4 fills the folder with the two generated files.
 
 - [ ] **Step 1: Create the folder and move `manifest.json` into it**
 
@@ -248,7 +248,7 @@ chrome-extension/sidekick-render.js
 
 - [ ] **Step 6: Verify the extension shell loads (fallback expected, no feed yet)**
 
-Open `file:///Users/dalton/projects/sidekick/chrome-extension/newtab.html` in the browser (no data files in the folder yet). Expected: the graceful fallback paragraph ("No data yet — run `python sidekick.py regenerate`…" / "Couldn't load `sidekick-data.js`…"), **not** a blank page or a thrown error. This confirms the shell + shared brain degrade correctly. Task 3 supplies the feed.
+Open `file:///Users/dalton/projects/sidekick/chrome-extension/newtab.html` in the browser (no data files in the folder yet). Expected: the graceful fallback paragraph ("No data yet — run `python sidekick.py regenerate`…" / "Couldn't load `sidekick-data.js`…"), **not** a blank page or a thrown error. This confirms the shell + shared brain degrade correctly. Task 4 supplies the feed.
 
 - [ ] **Step 7: Commit**
 
@@ -260,9 +260,9 @@ git commit -m "$(printf 'feat: chrome-extension/ shell (manifest + newtab) and .
 
 ---
 
-### Task 2.5: Seed the four demo tasks
+### Task 3: Seed the four demo tasks
 
-Create the `tasks/*.md` files that back the four sample active tasks, so that once `regenerate` rebuilds the feed from real files (Task 3) the "In front of you" list stays populated instead of going empty. These reproduce the active entries currently hard-coded in `sidekick-data.js`. Deliverable: `read_active()` returns the four tasks with their plans.
+Create the `tasks/*.md` files that back the four sample active tasks, so that once `regenerate` rebuilds the feed from real files (Task 4) the "In front of you" list stays populated instead of going empty. These reproduce the active entries currently hard-coded in `sidekick-data.js`. Deliverable: `read_active()` returns the four tasks with their plans.
 
 **Files:**
 - Create: `tasks/20260613-sort-the-car-insurance-renewal.md`
@@ -272,7 +272,7 @@ Create the `tasks/*.md` files that back the four sample active tasks, so that on
 
 **Interfaces:**
 - Consumes: nothing from other tasks (frontmatter schema is in `sidekick.py`'s `read_active`/`read_note`).
-- Produces: four open task files. `read_active()` returns them sorted longest-sitting first; three carry a `plan`, the passport one does not. Task 3 regenerates the feed from these.
+- Produces: four open task files. `read_active()` returns them sorted longest-sitting first; three carry a `plan`, the passport one does not. Task 4 regenerates the feed from these.
 
 - [ ] **Step 1: Create the four task files (exact content)**
 
@@ -360,7 +360,7 @@ git commit -m "$(printf 'feat: seed the four demo tasks backing the active list\
 
 ---
 
-### Task 3: Wire `regenerate` to mirror the feed + render brain into the extension
+### Task 4: Wire `regenerate` to mirror the feed + render brain into the extension
 
 Replace `regenerate`'s old conditional `sidekick-data.json` branch with an atomic copy of both moving files into `chrome-extension/`. This is the keystone: it makes every new tab live. Test-first with stdlib `unittest`.
 
@@ -369,7 +369,7 @@ Replace `regenerate`'s old conditional `sidekick-data.json` branch with an atomi
 - Modify: `sidekick.py` (add `import shutil`; add `RENDER_JS` path constant near line 47; replace the extension branch in `regenerate()` at lines 184–190)
 
 **Interfaces:**
-- Consumes: `chrome-extension/` (Task 2); `sidekick-render.js` (Task 1); the seeded `tasks/*.md` (Task 2.5), so the regenerated feed has 4 active tasks.
+- Consumes: `chrome-extension/` (Task 2); `sidekick-render.js` (Task 1); the seeded `tasks/*.md` (Task 3), so the regenerated feed has 4 active tasks.
 - Produces: after `regenerate`, `chrome-extension/sidekick-data.js` and `chrome-extension/sidekick-render.js` exist and are byte-identical to their root sources (when those sources exist and the folder is present).
 
 - [ ] **Step 1: Write the failing test**
@@ -508,7 +508,7 @@ git commit -m "$(printf 'feat: regenerate mirrors live feed + render brain into 
 
 ---
 
-### Task 4: The `sidekick` command wrapper
+### Task 5: The `sidekick` command wrapper
 
 A single executable that dispatches to both Python tools, resolving its own directory so it works from anywhere on `PATH` (including via a symlink). Pure pass-through.
 
@@ -593,7 +593,7 @@ git commit -m "$(printf 'feat: sidekick command wrapper (one front door, pure di
 
 ---
 
-### Task 5: `setup.sh` — one-shot bring-up
+### Task 6: `setup.sh` — one-shot bring-up
 
 An idempotent, skippable interactive bring-up. Safe to re-run; never writes the ledger.
 
@@ -700,7 +700,7 @@ git commit -m "$(printf 'feat: setup.sh one-shot bring-up (idempotent, skippable
 
 ---
 
-### Task 6: Reconcile the docs (and bring the core scripts under version control)
+### Task 7: Reconcile the docs (and bring the core scripts under version control)
 
 Update `README.md` + `CLAUDE.md` to the real layout and the new commands, and commit the previously-untracked core source files so the repo actually *is* the app.
 
@@ -793,15 +793,16 @@ Expected: tests pass, `SYNCED` prints, and `git status` shows a clean tree with 
 - §4.1 shared render brain → Task 1 ✓
 - §4.2 `sidekick.html` rewire + foot-note → Task 1 ✓
 - §4.3 `chrome-extension/newtab.html` shell → Task 2 ✓
-- §4.4 `regenerate` copy step → Task 3 ✓
-- §4.5 `sidekick` wrapper → Task 4 ✓
-- §4.6 `setup.sh` → Task 5 ✓
-- §4.7 docs → Task 6 ✓
+- §4.4 `regenerate` copy step → Task 4 ✓
+- §4.5 `sidekick` wrapper → Task 5 ✓
+- §4.6 `setup.sh` → Task 6 ✓
+- §4.7 docs → Task 7 ✓
 - §4.8 `.gitignore` → Task 2 ✓
-- §7 acceptance: §7.1 unpacked-reload → Task 3 Step 8; §7.2 standalone identical → Task 1 Step 5; §7.3 no `newtab.js`/`.json` consumer → Task 6 Step 5 grep; §7.4 both feeds identical → Task 3 Step 6 / Task 6 Step 7; §7.5 wrapper+setup run → Task 4 Step 3 + Task 5 Step 3; §7.6 generated copies ignored → Task 6 Step 7. ✓
+- Seed demo tasks (active-list decision) → Task 3 ✓
+- §7 acceptance: §7.1 unpacked-reload → Task 4 Step 8; §7.2 standalone identical → Task 1 Step 5; §7.3 no `newtab.js`/`.json` consumer → Task 7 Step 5 grep; §7.4 both feeds identical → Task 4 Step 6 / Task 7 Step 7; §7.5 wrapper+setup run → Task 5 Step 3 + Task 6 Step 3; §7.6 generated copies ignored → Task 7 Step 7. ✓
 
 **2. Placeholder scan:** No "TBD"/"add error handling"/"similar to Task N". All code shown in full; the one verbatim extraction (Task 1) is a `sed` move with explicit boundary verification rather than a retype. ✓
 
-**3. Type/name consistency:** `RENDER_JS`/`DATA_JS` constants and the `chrome-extension/` basename copy are consistent between Task 3's implementation and its test. The wrapper subcommands in Task 4 match those documented in Task 6. The foot-note replacement text is internally consistent (vault-backed) across Tasks 1, 2, 6. ✓
+**3. Type/name consistency:** `RENDER_JS`/`DATA_JS` constants and the `chrome-extension/` basename copy are consistent between Task 4's implementation and its test. The wrapper subcommands in Task 5 match those documented in Task 7. The foot-note replacement text is internally consistent (vault-backed) across Tasks 1, 2, 7. ✓
 
-**Note on the one risk:** Task 3 Step 8 (unpacked auto-refresh) is the only step gated on real Chrome behavior; it has an explicit fallback and does not block Tasks 4–6.
+**Note on the one risk:** Task 4 Step 8 (unpacked auto-refresh) is the only step gated on real Chrome behavior; it has an explicit fallback and does not block Tasks 5–7.

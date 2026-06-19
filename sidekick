@@ -19,6 +19,7 @@ sidekick — vault commands
   sidekick set-plan <id> [--file plan.json]      (omit --file to read stdin)
   sidekick complete <id>
   sidekick regenerate
+  sidekick wiki                                  rebuild wiki/_index.md
 
   sidekick nudge [--dry-run]                      decide + send (or just print)
   sidekick nudge-test "<text>"                    channel check
@@ -32,7 +33,7 @@ EOF
 
 cmd="${1:-help}"; shift || true
 case "$cmd" in
-  new|set-plan|complete|regenerate)  exec python3 "$DIR/sidekick.py" "$cmd" "$@" ;;
+  new|set-plan|complete|regenerate|wiki)  exec python3 "$DIR/sidekick.py" "$cmd" "$@" ;;
   nudge)                             exec python3 "$DIR/nudge.py" run "$@" ;;
   nudge-test)                        exec python3 "$DIR/nudge.py" test "$@" ;;
   find-chat)                         exec python3 "$DIR/nudge.py" find-chat "$@" ;;

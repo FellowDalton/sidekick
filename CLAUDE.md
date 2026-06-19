@@ -29,7 +29,7 @@ Everything lives in this vault (one git repo). No Google, no OAuth, no API.
 ## The orchestrator step (the only model-driven part)
 When a task needs research, *you* (the model) do the legwork, then:
 1. write the worked-out steps as a plan and persist with `set-plan` (structured → frontmatter → dashboard);
-2. drop the raw research prose into `raw/` (seeds the future wiki, §6 Layer 2).
+2. drop the raw research prose into `raw/` — the archive behind the wiki (see **The wiki — reusable memory (Layer 2)** below).
 The plan is data; the research is prose. Don't make one reverse-engineer the other.
 
 ## The wiki — reusable memory (Layer 2)

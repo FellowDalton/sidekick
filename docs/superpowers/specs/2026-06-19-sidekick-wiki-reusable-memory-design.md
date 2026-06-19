@@ -132,7 +132,7 @@ research (orchestrator) ─► raw/<date>-<slug>.md     (verbatim archive)
 ## 6. Error handling / edge cases
 - **No `wiki/` dir:** `sidekick wiki` no-ops with a notice (does not create the folder). The before-research read simply finds nothing and the orchestrator seeds the first note.
 - **Empty `wiki/`:** index is written with the `_No topics yet._` body.
-- **Malformed/missing frontmatter in a note:** degrade to title-from-H1-or-stem; never crash.
+- **Malformed/missing frontmatter in a note:** degrade to `title=stem` (per §4.4), empty summary/updated; never crash.
 - **`updated` not a valid date:** treated as an opaque string for sorting/display (ISO assumed; garbage sorts wherever it falls lexically) — acceptable for a fuzzy layer; no validation.
 - **`_index.md` present:** always excluded from the scan so it never indexes itself.
 

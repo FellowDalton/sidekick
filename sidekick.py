@@ -241,13 +241,13 @@ def wiki_index():
             if e["updated"]:
                 line += f"  ·  updated {e['updated']}"
             lines.append(line)
-        body = "\n".join(lines) + "\n"
+        content = "\n".join(lines) + "\n"
     else:
-        body = "_No topics yet._\n"
+        content = "_No topics yet._\n"
 
     tmp = WIKI_INDEX + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        f.write(head + body)
+        f.write(head + content)
     os.replace(tmp, WIKI_INDEX)              # atomic: a half-written index is never read
     print(f"wrote wiki/_index.md — {len(entries)} topics")
 

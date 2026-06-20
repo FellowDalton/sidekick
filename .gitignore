@@ -2,6 +2,9 @@
 nudge.config.json
 nudge.log
 
+# host API idempotency store (runtime state, per-vault)
+.sidekick-idempotency.json
+
 # generated copies mirrored into the extension by `sidekick.py regenerate`
 chrome-extension/sidekick-data.js
 chrome-extension/sidekick-render.js

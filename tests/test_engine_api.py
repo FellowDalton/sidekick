@@ -22,8 +22,13 @@ class EngineApiExtensions(unittest.TestCase):
         return [l for l in (self.vault / "ledger.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
 
     def test_configure_repoints_paths(self):
-        self.assertEqual(sidekick.LEDGER, str(self.vault / "ledger.jsonl"))
+        self.assertEqual(sidekick.VAULT, str(self.vault))
         self.assertEqual(sidekick.TASKS, str(self.vault / "tasks"))
+        self.assertEqual(sidekick.LEDGER, str(self.vault / "ledger.jsonl"))
+        self.assertEqual(sidekick.DATA_JS, str(self.vault / "sidekick-data.js"))
+        self.assertEqual(sidekick.RENDER_JS, str(self.vault / "sidekick-render.js"))
+        self.assertEqual(sidekick.WIKI, str(self.vault / "wiki"))
+        self.assertEqual(sidekick.WIKI_INDEX, str(self.vault / "wiki" / "_index.md"))
 
     def test_complete_honors_completed_at_and_appends_once(self):
         tid = sidekick.create_task("Call dentist", "phone")
@@ -37,7 +42,8 @@ class EngineApiExtensions(unittest.TestCase):
 
     def test_complete_is_idempotent(self):
         tid = sidekick.create_task("Renew passport", "admin")
-        sidekick.complete(tid)
+        first = sidekick.complete(tid)
+        self.assertFalse(first["already_done"])
         again = sidekick.complete(tid)
         self.assertTrue(again["already_done"])
         self.assertEqual(len(self._ledger_lines()), 1)  # no second event

@@ -41,4 +41,8 @@ def commit_and_push(repo, message, *, push=True, remote="origin", retries=3):
             return _run(["rev-parse", "HEAD"], repo)
         except GitSyncError as e:
             last = e
+            # leave no half-finished rebase behind, so the next attempt — and the
+            # next request — starts from a clean working tree
+            subprocess.run(["git", "rebase", "--abort"], cwd=repo,
+                           capture_output=True, text=True)
     raise GitSyncError(f"push failed after {retries} retries: {last}")

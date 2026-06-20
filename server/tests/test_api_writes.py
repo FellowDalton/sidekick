@@ -78,3 +78,16 @@ def test_complete_idempotency_key_replays(client):
     assert second.json()["completed_at"] == "2026-06-20T07:00:00Z"  # replayed, not the 23:00 retry
     events = client.get("/feed", headers=AUTH).json()["events"]
     assert sum(1 for e in events if e["task"] == "Water plants") == 1  # exactly one event
+
+
+def test_write_returns_409_on_git_failure(vault_repo):
+    from server.config import Config
+    from server.app import create_app
+    from fastapi.testclient import TestClient
+    # a remote name that doesn't exist -> pull/push fails -> GitSyncError -> 409
+    cfg = Config(vault=str(vault_repo), token="test-token", push=True, remote="nonexistent-remote")
+    c = TestClient(create_app(cfg))
+    r = c.post("/tasks", json={"title": "Will fail to push", "category": "phone"},
+               headers={"Authorization": "Bearer test-token"})
+    assert r.status_code == 409
+    assert "error" in r.json()

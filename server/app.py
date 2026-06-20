@@ -34,6 +34,10 @@ def create_app(config=None):
     async def _http_exc(request: Request, exc: HTTPException):
         return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
 
+    @app.exception_handler(git_sync.GitSyncError)
+    async def _git_exc(request: Request, exc: git_sync.GitSyncError):
+        return JSONResponse(status_code=409, content={"error": str(exc)})
+
     def require_auth(authorization):
         if authorization != f"Bearer {config.token}":
             raise HTTPException(status_code=401, detail="unauthorized")

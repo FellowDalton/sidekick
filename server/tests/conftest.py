@@ -47,3 +47,19 @@ def clone(remote: Path, dest: Path) -> Path:
     git(["config", "user.email", "other@sidekick.local"], dest)
     git(["config", "user.name", "Other Clone"], dest)
     return dest
+
+
+@pytest.fixture
+def app_config(vault_repo):
+    from server.config import Config
+    return Config(vault=str(vault_repo), token="test-token", push=True, remote="origin")
+
+
+@pytest.fixture
+def client(app_config):
+    from fastapi.testclient import TestClient
+    from server.app import create_app
+    return TestClient(create_app(app_config))
+
+
+AUTH = {"Authorization": "Bearer test-token"}

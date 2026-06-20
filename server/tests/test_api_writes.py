@@ -62,3 +62,19 @@ def test_complete_unknown_task_404(client):
     r = client.post("/tasks/does-not-exist/complete", json={}, headers=AUTH)
     assert r.status_code == 404
     assert "does-not-exist" in r.json()["error"]
+
+
+def test_complete_idempotency_key_replays(client):
+    tid = client.post("/tasks", json={"title": "Water plants", "category": "chore"},
+                      headers=AUTH).json()["id"]
+    headers = {**AUTH, "Idempotency-Key": "complete-key-1"}
+    first = client.post(f"/tasks/{tid}/complete",
+                        json={"completed_at": "2026-06-20T07:00:00Z"}, headers=headers)
+    # same key, DIFFERENT body -> must replay the first response, not re-apply
+    second = client.post(f"/tasks/{tid}/complete",
+                         json={"completed_at": "2026-06-20T23:00:00Z"}, headers=headers)
+    assert second.status_code == first.status_code
+    assert second.json() == first.json()
+    assert second.json()["completed_at"] == "2026-06-20T07:00:00Z"  # replayed, not the 23:00 retry
+    events = client.get("/feed", headers=AUTH).json()["events"]
+    assert sum(1 for e in events if e["task"] == "Water plants") == 1  # exactly one event

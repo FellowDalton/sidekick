@@ -51,7 +51,7 @@ def create_app(config=None):
             prior = idem.get(idem_key)
             if prior is not None:
                 return JSONResponse(status_code=prior["status_code"], content=prior["body"])
-        status_code, body = fn()
+        status_code, body = fn()   # fn() may raise HTTPException (e.g. 404); let it propagate — errors must never be cached
         if idem_key:
             idem.put(idem_key, status_code, body)
         return JSONResponse(status_code=status_code, content=body)

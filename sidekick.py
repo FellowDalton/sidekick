@@ -49,6 +49,19 @@ RENDER_JS = os.path.join(VAULT, "sidekick-render.js")
 WIKI       = os.path.join(VAULT, "wiki")
 WIKI_INDEX = os.path.join(WIKI, "_index.md")
 
+def configure(vault):
+    """Re-point the engine at a different vault. Recomputes every path global from
+    `vault`. Used by the host server (one vault per process) and by tests (throwaway
+    vaults). The engine is otherwise unchanged and stays deterministic."""
+    global VAULT, TASKS, LEDGER, DATA_JS, RENDER_JS, WIKI, WIKI_INDEX
+    VAULT = vault
+    TASKS = os.path.join(VAULT, "tasks")
+    LEDGER = os.path.join(VAULT, "ledger.jsonl")
+    DATA_JS = os.path.join(VAULT, "sidekick-data.js")
+    RENDER_JS = os.path.join(VAULT, "sidekick-render.js")
+    WIKI = os.path.join(VAULT, "wiki")
+    WIKI_INDEX = os.path.join(WIKI, "_index.md")
+
 # ── time helpers ─────────────────────────────────────────────────────────────
 def now_iso():
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -113,25 +126,35 @@ def set_plan(task_id, summary, steps):
     write_note(task_path(task_id), fm, body)
     print(f"plan set on {task_id}")
 
-def complete(task_id):
+def complete(task_id, completed_at=None):
     """Append the completion event to the ledger (its only writer), then mark the
-    task done. sat_for_hours comes from the stamped `created` field."""
+    task done. Idempotent: an already-done task is NOT re-appended. `completed_at` (ISO
+    string) lets a caller (e.g. the phone) stamp the moment of completion; defaults to
+    now. Returns a result dict. Raises FileNotFoundError if the task file is absent."""
     fm, body = read_note(task_path(task_id))
-    plan = fm.get("plan")
     title = next((l[2:].strip() for l in body.splitlines() if l.startswith("# ")), task_id)
+    if fm.get("status") == "done":
+        return {"id": task_id, "task": title, "category": fm.get("category"),
+                "status": "done", "completed_at": fm.get("completed"),
+                "sat_for_hours": None, "already_done": True}
+    plan = fm.get("plan")
+    stamp = completed_at or now_iso()
     event = {
         "task": title,
         "category": fm.get("category"),
-        "completed_at": now_iso(),
+        "completed_at": stamp,
         "sat_for_hours": hours_since(fm.get("created")),
         "orchestrator": (plan or {}).get("summary"),   # what the orchestrator did to help (§6)
     }
     with open(LEDGER, "a", encoding="utf-8") as f:       # append-only, code-only
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
     fm["status"] = "done"
-    fm["completed"] = event["completed_at"]
+    fm["completed"] = stamp
     write_note(task_path(task_id), fm, body)
     print(f"completed {task_id}  ->  ledger +1")
+    return {"id": task_id, "task": title, "category": event["category"],
+            "status": "done", "completed_at": stamp,
+            "sat_for_hours": event["sat_for_hours"], "already_done": False}
 
 # ── the assembler (read side) ────────────────────────────────────────────────
 def read_active():

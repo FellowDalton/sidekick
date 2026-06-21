@@ -9,6 +9,10 @@
   const branches = $derived(branchVMs(feed));
   const log = $derived(recentLog(feed, 7));
   const R = 52, C = 2 * Math.PI * R;
+
+  function safeHref(h: string | undefined): string | null {
+    return h && /^(https?|tel|mailto):/i.test(h) ? h : null;
+  }
 </script>
 
 <section class="hero">
@@ -42,9 +46,9 @@
         <div class="plan-sum"><span class="prep">Prepared</span>{t.plan.summary}</div>
         <ol class="steps">
           {#each t.plan.steps as s, i}
+            {@const href = safeHref(s.href)}
             <li class:next={i === 0}>
-              {#if s.href}<a href={s.href} target={s.href.startsWith("tel:") ? undefined : "_blank"} rel="noopener">{s.text}</a>
-              {:else}{s.text}{/if}
+              {#if href}<a {href} target={href.startsWith("tel:") ? undefined : "_blank"} rel="noopener">{s.text}</a>{:else}{s.text}{/if}
             </li>
           {/each}
         </ol>

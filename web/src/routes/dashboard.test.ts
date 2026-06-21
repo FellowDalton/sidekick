@@ -5,8 +5,8 @@ import type { Feed } from "$lib/types";
 
 const feed: Feed = {
   events: [
-    { task: "Called dentist", category: "phone", completed_at: "2026-06-07T00:00:00Z", sat_for_hours: 5, orchestrator: null },
-    { task: "Ran errand", category: "errand", completed_at: "2026-06-06T00:00:00Z", sat_for_hours: 30, orchestrator: null }
+    { task: "Called dentist", category: "phone", completed_at: "2026-06-09T00:00:00Z", sat_for_hours: 5, orchestrator: null },
+    { task: "Ran errand", category: "errand", completed_at: "2026-06-08T00:00:00Z", sat_for_hours: 30, orchestrator: null }
   ],
   active: [
     { id: "t1", task: "Replace fan", category: "chore", sat_for_hours: 120,
@@ -17,10 +17,10 @@ const feed: Feed = {
 
 describe("Dashboard", () => {
   it("renders the level, open tasks, branches, and log from a feed", () => {
-    render(Dashboard, { props: { feed } });
+    const { container } = render(Dashboard, { props: { feed } });
     // hero: 2 events -> level 0 (need 4 for level 1)
     expect(screen.getByText("Getting started")).toBeInTheDocument();
-    expect(screen.getAllByText(/2/).length).toBeGreaterThan(0);
+    expect(container.querySelector(".stats")?.textContent).toContain("2 tasks cleared");
     // open tasks
     expect(screen.getByText("Replace fan")).toBeInTheDocument();
     expect(screen.getByText("Email landlord")).toBeInTheDocument();
@@ -29,5 +29,15 @@ describe("Dashboard", () => {
     // a branch + a log row
     expect(screen.getByText("Diplomat")).toBeInTheDocument();
     expect(screen.getByText("Called dentist")).toBeInTheDocument();
+  });
+
+  it("does not render a javascript: href as a link (XSS guard)", () => {
+    const evil = {
+      events: [],
+      active: [{ id: "x", task: "Evil", category: "chore", sat_for_hours: 1,
+        plan: { summary: "s", steps: [{ text: "click me", href: "javascript:alert(1)" }] } }]
+    };
+    render(Dashboard, { props: { feed: evil as any } });
+    expect(screen.getByText("click me").closest("a")).toBeNull(); // plain text, not an anchor
   });
 });

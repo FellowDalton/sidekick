@@ -11,7 +11,11 @@ test("read, capture, and complete against a mocked API", async ({ page }) => {
 
   let created = false, completed = false;
   await page.route("**/api/feed", r => r.fulfill({ json: feed }));
-  await page.route("**/api/tasks", r => { created = true; r.fulfill({ status: 201, json: { id: "t2", task: "Buy milk", category: "errand", sat_for_hours: 0, plan: null } }); });
+  await page.route("**/api/tasks", r => {
+    if (r.request().method() !== "POST") { r.continue(); return; }
+    created = true;
+    r.fulfill({ status: 201, json: { id: "t2", task: "Buy milk", category: "errand", sat_for_hours: 0, plan: null } });
+  });
   await page.route("**/api/tasks/*/complete", r => { completed = true; r.fulfill({ json: { id: "t1", status: "done", completed_at: "x", sat_for_hours: 1, already_done: false } }); });
 
   await page.goto("/");
@@ -24,6 +28,7 @@ test("read, capture, and complete against a mocked API", async ({ page }) => {
   await page.getByLabel(/category/i).selectOption("errand");
   await page.getByRole("button", { name: /capture/i }).click();
   await expect.poll(() => created).toBe(true);
+  await expect(page).toHaveURL("/");   // wait for the post-capture navigation to land
 
   // complete
   await page.getByRole("button", { name: /done/i }).click();

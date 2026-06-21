@@ -55,7 +55,7 @@
       {:else}
         <div class="noplan-msg muted">No plan yet — ask the orchestrator to clear the first step.</div>
       {/if}
-      <button class="btn btn-done" aria-label="Done" disabled={pending.has(t.id)} onclick={() => onComplete(t.id)}>
+      <button class="btn btn-done" aria-label="Done" aria-busy={pending.has(t.id)} disabled={pending.has(t.id)} onclick={() => onComplete(t.id)}>
         {pending.has(t.id) ? "Completing…" : "Done"}
       </button>
     </article>

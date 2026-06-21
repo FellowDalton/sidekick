@@ -23,11 +23,11 @@
   <div>
     <div class="eyebrow">Level</div>
     <h1>{h.word}</h1>
-    <div class="stats"><b>{h.total}</b> tasks cleared</div>
+    <div class="stats"><b>{h.total}</b> tasks cleared <span class="dot">·</span> <b>{h.toNext}</b> to level {h.level + 1}</div>
   </div>
 </section>
 
-<div class="head"><h2>In front of you</h2><span class="rule"></span></div>
+<div class="head"><h2>In front of you</h2><span class="count">{feed.active.length} open</span><span class="rule"></span></div>
 <section class="section">
   {#each feed.active as t (t.id)}
     <article class="task-card" class:noplan={!t.plan}>
@@ -64,7 +64,7 @@
         <div class="bname">{b.name}</div>
         <div class="blvl">Level {b.level}</div>
         <div class="bar"><i style="width:{b.pct * 100}%"></i></div>
-        <div class="foot"><span>{b.count} done</span></div>
+        <div class="foot"><span>{b.into}/{b.span} to next</span><span>{b.count} done</span></div>
       </div>
     {:else}
       <div class="branch unlit">

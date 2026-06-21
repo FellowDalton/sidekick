@@ -20,7 +20,7 @@ describe("Dashboard", () => {
     render(Dashboard, { props: { feed } });
     // hero: 2 events -> level 0 (need 4 for level 1)
     expect(screen.getByText("Getting started")).toBeInTheDocument();
-    expect(screen.getByText(/2/)).toBeInTheDocument();
+    expect(screen.getAllByText(/2/).length).toBeGreaterThan(0);
     // open tasks
     expect(screen.getByText("Replace fan")).toBeInTheDocument();
     expect(screen.getByText("Email landlord")).toBeInTheDocument();

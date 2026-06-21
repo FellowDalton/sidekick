@@ -2,6 +2,9 @@ import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 
 export default defineConfig({
+  resolve: {
+    conditions: ["browser"]
+  },
   plugins: [sveltekit()],
   server: {
     proxy: {
@@ -15,6 +18,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: ["./vitest-setup.ts"]
+    setupFiles: ["./vitest-setup.ts"],
+    conditions: ["browser"]
   }
 });

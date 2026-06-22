@@ -48,6 +48,9 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./vitest-setup.ts"],
-    conditions: ["browser"]
+    conditions: ["browser"],
+    // only unit/component tests under src/ — keep Vitest from collecting the
+    // Playwright e2e specs in e2e/ (which would error under Vitest's runner).
+    include: ["src/**/*.{test,spec}.{js,ts}"]
   }
 });

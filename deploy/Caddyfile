@@ -1,0 +1,21 @@
+# Sidekick same-origin router (localhost only).
+#
+# TLS and public exposure are handled by `tailscale serve` in front of this; Caddy here
+# is a plain HTTP router on 127.0.0.1:8080 that does the two things the PWA needs and
+# that tailscale serve cannot do on its own:
+#   1. strip the /api prefix before proxying to the unprefixed FastAPI routes, and
+#   2. SPA fallback (serve index.html for client-side routes) for the static build.
+#
+# Mirrors web/README.md's prod Caddyfile, minus the public domain / auto-TLS block.
+
+http://127.0.0.1:8080 {
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy 127.0.0.1:8000
+	}
+	handle {
+		root * /srv/sidekick/web/build
+		try_files {path} /index.html
+		file_server
+	}
+}

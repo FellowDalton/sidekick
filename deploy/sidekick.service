@@ -1,0 +1,23 @@
+[Unit]
+Description=Sidekick host API (uvicorn, single worker)
+Documentation=https://github.com/FellowDalton/sidekick/blob/main/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sidekick
+Group=sidekick
+WorkingDirectory=/srv/sidekick
+EnvironmentFile=/etc/sidekick.env
+# Single worker on purpose: the write lock that serializes ledger appends is per-process.
+ExecStart=/srv/sidekick/.venv/bin/uvicorn server.app:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
+Restart=always
+RestartSec=2
+# Hardening: the service only needs to read/write its own clone.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -7,8 +7,14 @@
 #   2. SPA fallback (serve index.html for client-side routes) for the static build.
 #
 # Mirrors web/README.md's prod Caddyfile, minus the public domain / auto-TLS block.
+#
+# Site label is `:8080` (matches ANY Host) with `bind 127.0.0.1` (listens on loopback only).
+# Do NOT use `http://127.0.0.1:8080` here: that makes Caddy match only requests whose Host
+# header is `127.0.0.1`, but `tailscale serve` forwards the original Host
+# (sidekick.<tailnet>.ts.net) — which would match no site and return an empty 200.
 
-http://127.0.0.1:8080 {
+:8080 {
+	bind 127.0.0.1
 	handle /api/* {
 		uri strip_prefix /api
 		reverse_proxy 127.0.0.1:8000

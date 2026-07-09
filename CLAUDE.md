@@ -14,6 +14,13 @@ Everything lives in this vault (one git repo). No Google, no OAuth, no API.
 ## The one rule
 **Run `python sidekick.py regenerate` after any change.** It rebuilds `sidekick-data.js` from the task files + ledger.
 
+## Deployed — keep this Mac clone in sync
+Sidekick is **live**: an always-on Hetzner VPS runs `server/` behind Tailscale (`https://sidekick.tail81b55b.ts.net`), and the phone/browser app writes tasks **through the host**, which publishes to GitHub (`FellowDalton/sidekick`). So this Mac clone can silently drift from what the phone has done. Therefore, whenever you do task work here:
+- **`git pull` first** — pick up the phone's captures/completions before you touch anything;
+- **`git commit && git push` after** — so your change reaches the host and phone (the Mac CLI does *not* auto-push; only the host's API does).
+
+Git runs **unattended** (no Touch ID). Never re-add a `Host *` 1Password `IdentityAgent` to `~/.ssh/config` — it breaks phone-launched sessions. Deploy details: `deploy/WALKTHROUGH.md`.
+
 ## Routine
 | When | Command |
 |---|---|

@@ -1,7 +1,9 @@
 # Sidekick — session handoff
 
-**As of:** 2026-06-22 · `main` @ `d3229a3` (pushed to `origin/main`)
+**As of:** 2026-07-09 · `main` @ `8b44c67` (pushed to `origin/main`)
 **Purpose:** Bring a fresh session up to speed. Read this, then `CLAUDE.md` (agent operating rules) and `README.md` (human overview).
+
+> **Update 2026-07-09 — the phone app is now DEPLOYED and live.** Phase 4 is done: `server/` runs on an always-on Hetzner CX23 VPS (Falkenstein) behind a localhost Caddy router, reached privately over **Tailscale** with auto-HTTPS at `https://sidekick.tail81b55b.ts.net`. The PWA is installed on the iPhone and does live read/write/publish; the host pushes ledger commits to GitHub via a deploy key. Runbook + artifacts: `deploy/`. The "NOT deployed" notes below are historical. Obsidian Git (old Phase 4 item) was **dropped** — the user drives Sidekick via the app + Claude Code, not Obsidian; instead this Mac clone syncs by plain git (`git pull` before task work, `git push` after — see `CLAUDE.md`).
 
 ---
 
@@ -21,8 +23,9 @@ All of the following is on `main`, reviewed (subagent-driven dev + opus whole-br
 |---|---|---|---|
 | **Original system** | Vault (`tasks/*.md` + `ledger.jsonl`), `sidekick.py` CLI, static `sidekick.html` dashboard, `chrome-extension/` new-tab, `nudge.py` | repo root | Pre-existing, working |
 | **Layer 2 — reusable memory** | `raw/` (verbatim research archive) + `wiki/` (synthesized topic notes) + `sidekick wiki` (deterministic `wiki/_index.md` map-of-content) | `sidekick.py`, `tests/test_wiki.py` | **Done, merged.** Folders are created by the orchestrator at first use (code no-ops if absent) |
-| **Phone app — Phase 1** | Always-on host **HTTP API** wrapping `sidekick.py`: `GET /feed`, `POST /tasks`, `POST /tasks/{id}/complete`; bearer auth; `Idempotency-Key` replay; write lock; git publish (union-merge ledger) | `server/` | **Done, merged. Built & tested locally; NOT deployed** |
-| **Phone app — Phase 2** | Installable **SvelteKit PWA**: dashboard (game brain ported), Complete + Capture, Settings (token); same-origin via proxy (no CORS); offline-read service worker | `web/` | **Done, merged. Runs in dev; NOT deployed; not yet installed on a phone** |
+| **Phone app — Phase 1** | Always-on host **HTTP API** wrapping `sidekick.py`: `GET /feed`, `POST /tasks`, `POST /tasks/{id}/complete`; bearer auth; `Idempotency-Key` replay; write lock; git publish (union-merge ledger) | `server/` | **Done, merged. DEPLOYED** on the Hetzner VPS (systemd `sidekick`) |
+| **Phone app — Phase 2** | Installable **SvelteKit PWA**: dashboard (game brain ported), Complete + Capture, Settings (token); same-origin via proxy (no CORS); offline-read service worker | `web/` | **Done, merged. DEPLOYED & installed on the iPhone** (served by Caddy behind `tailscale serve`) |
+| **Phase 4 — deploy** | VPS bootstrap + systemd + localhost Caddy router + Tailscale front door; deploy key for host→GitHub pushes; unattended git on the Mac | `deploy/` | **Done, live.** See the 2026-07-09 update above |
 
 **Tests (all green on `main`):** `tests/` → 11 (stdlib unittest) · `server/tests/` → 18 (pytest) · `web/` → 21 unit/component (Vitest) + 1 e2e (Playwright).
 
@@ -89,10 +92,11 @@ To **see it**: run the API (above) + `npm run dev`, open the Vite URL, paste `de
 - **Capacitor** native wrapper for a real App Store app (the PWA is built to be wrappable).
 - Relocate the **nudge** from Mac-launchd to host-cron (kills its "Mac must be awake at 9am" reliability hole).
 
-**Phase 4 (deploy/integration — manual, not done):**
-- Provision the always-on host (Hetzner VPS recommended; persistent storage required) and run `server/` behind Caddy/TLS.
-- On the Mac: install the **Obsidian Git** plugin, point at the canonical remote, enable auto pull/commit/push.
-- Until these are done, the phone app only runs in local dev — it is not live on a phone.
+**Phase 4 (deploy/integration — DONE 2026-07-09):**
+- ✅ Host provisioned (Hetzner CX23, Falkenstein), `server/` runs under systemd behind a localhost Caddy router, exposed via `tailscale serve` (auto-HTTPS, tailnet-only). Bootstrap + runbook in `deploy/`.
+- ✅ Reached from the iPhone over Tailscale; PWA installed to the home screen; live read/write/publish confirmed.
+- ↳ **Obsidian Git was dropped** (the user doesn't use Obsidian). Mac clone syncs via plain git instead — pull before / push after task work; git is unattended (no Touch ID). See `CLAUDE.md`.
+- Still parked from the original Phase 4: relocating the **nudge** to host-cron (still Mac-launchd).
 
 **Known minor/cosmetic items (deliberately left; none block):**
 - `wiki` malformed-frontmatter degrades title→stem (per spec §4.4; **decided** behavior, not a bug).

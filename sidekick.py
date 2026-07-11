@@ -107,13 +107,20 @@ def task_path(task_id):
     return os.path.join(TASKS, task_id + ".md")
 
 # ── capture / orchestrator helpers (write side) ─────────────────────────────
-def create_task(title, category):
+def create_task(title, category, *, from_=None, shared=False):
+    """Create an open task. `from_` (dalton|wife|sidekick) and `shared` are the
+    shared-list frontmatter fields (spec sub-project 2) — written only when set,
+    so a plain create produces the same file as before."""
     os.makedirs(TASKS, exist_ok=True)
     task_id = dt.datetime.now().strftime("%Y%m%d") + "-" + slug(title)
     n, base = 2, task_id
     while os.path.exists(task_path(task_id)):
         task_id = f"{base}-{n}"; n += 1
     fm = {"category": category, "created": now_iso(), "status": "open"}
+    if from_:
+        fm["from"] = from_
+    if shared:
+        fm["shared"] = True
     write_note(task_path(task_id), fm, f"# {title}\n")
     print(f"created {task_id}")
     return task_id
@@ -174,6 +181,8 @@ def read_active():
             "category": fm.get("category"),
             "sat_for_hours": hours_since(fm.get("created")),
             "plan": fm.get("plan"),
+            "from": fm.get("from"),
+            "shared": bool(fm.get("shared")),
         })
     # longest-sitting first — the most-stalled task surfaces at the top
     active.sort(key=lambda a: (a["sat_for_hours"] is not None, a["sat_for_hours"] or 0), reverse=True)
@@ -281,6 +290,8 @@ def main():
     sub.add_parser("regenerate")
     sub.add_parser("wiki")
     pn = sub.add_parser("new");      pn.add_argument("title"); pn.add_argument("--category", required=True)
+    pn.add_argument("--from", dest="from_", default=None, help="who created it (dalton|wife|sidekick)")
+    pn.add_argument("--shared", action="store_true", help="put it on the shared list")
     pp = sub.add_parser("set-plan"); pp.add_argument("id"); pp.add_argument("--file", help="JSON {summary, steps}; omit to read stdin")
     pc = sub.add_parser("complete"); pc.add_argument("id")
     a = ap.parse_args()
@@ -290,7 +301,7 @@ def main():
     elif a.cmd == "wiki":
         wiki_index()
     elif a.cmd == "new":
-        create_task(a.title, a.category); regenerate()
+        create_task(a.title, a.category, from_=a.from_, shared=a.shared); regenerate()
     elif a.cmd == "set-plan":
         raw = open(a.file, encoding="utf-8").read() if a.file else sys.stdin.read()
         plan = json.loads(raw)

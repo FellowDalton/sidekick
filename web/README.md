@@ -5,6 +5,11 @@ host API and lets you complete and capture tasks. It calls the API **same-origin
 a proxy** (Vite in dev, Caddy in prod), so there's no CORS and the backend is untouched.
 The level/branch/log "game brain" is computed in the browser from the raw feed.
 
+Role `shared` tokens land on **/shared** — a plain add-box + checkbox list — and are
+redirected away from everything else (Settings stays reachable for token entry); role
+`full` gets the whole app plus a Shared tab. The server enforces the roles; the UI
+only mirrors them.
+
 ## Develop
 ```bash
 # 1) run the Phase 1 host API (from the repo root)

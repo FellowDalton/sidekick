@@ -41,4 +41,29 @@ describe("identity store", () => {
     await loadIdentity("tok-1");
     expect(get(identity)).toEqual({ name: "dalton", role: "full" });
   });
+
+  it("out-of-order responses don't overwrite the newer token's identity", async () => {
+    let resolveA: any;
+    const promiseA = new Promise(resolve => { resolveA = resolve; });
+
+    let resolveB: any;
+    const promiseB = new Promise(resolve => { resolveB = resolve; });
+
+    vi.mocked(getMe)
+      .mockReturnValueOnce(promiseA as any)
+      .mockReturnValueOnce(promiseB as any);
+
+    const loadA = loadIdentity("tok-A");
+    const loadB = loadIdentity("tok-B");
+
+    // Let B resolve first
+    resolveB({ name: "wife", role: "shared" });
+    await loadB;
+    expect(get(identity)).toEqual({ name: "wife", role: "shared" });
+
+    // Now let A resolve – should not overwrite B
+    resolveA({ name: "dalton", role: "full" });
+    await loadA;
+    expect(get(identity)).toEqual({ name: "wife", role: "shared" });
+  });
 });

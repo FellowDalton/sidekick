@@ -32,9 +32,11 @@ if (browser) {
 }
 
 let lastToken: string | null = null;
+let generation = 0;
 
 /** Forget the cached identity (token cleared; tests). */
 export function resetIdentity() {
+  generation++;
   lastToken = null;
   identity.set(null);
 }
@@ -46,10 +48,17 @@ export async function loadIdentity(token: string): Promise<void> {
   if (!t) { resetIdentity(); return; }
   if (t === lastToken) return;
   lastToken = t;
+  generation++;
+  const currentGeneration = generation;
   try {
-    identity.set(await getMe());
+    const result = await getMe();
+    if (currentGeneration === generation) {
+      identity.set(result);
+    }
   } catch {
-    lastToken = null;
-    identity.set(null);
+    if (currentGeneration === generation) {
+      lastToken = null;
+      identity.set(null);
+    }
   }
 }

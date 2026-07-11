@@ -67,6 +67,27 @@ describe("identity store", () => {
     expect(get(identity)).toEqual({ name: "wife", role: "shared" });
   });
 
+  it("clears the feed SW cache when a new token starts loading", async () => {
+    const deleteCache = vi.fn();
+    vi.stubGlobal("caches", { delete: deleteCache });
+    vi.mocked(getMe).mockResolvedValue({ name: "dalton", role: "full" });
+
+    await loadIdentity("tok-1");
+
+    expect(deleteCache).toHaveBeenCalledWith("sidekick-feed");
+    vi.unstubAllGlobals();
+  });
+
+  it("clears the feed SW cache on resetIdentity", () => {
+    const deleteCache = vi.fn();
+    vi.stubGlobal("caches", { delete: deleteCache });
+
+    resetIdentity();
+
+    expect(deleteCache).toHaveBeenCalledWith("sidekick-feed");
+    vi.unstubAllGlobals();
+  });
+
   it("identity is nulled synchronously when a new token starts loading", async () => {
     vi.mocked(getMe).mockResolvedValueOnce({ name: "dalton", role: "full" });
     await loadIdentity("tok-A");

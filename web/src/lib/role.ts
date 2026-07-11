@@ -51,6 +51,9 @@ export function resetIdentity() {
   generation++;
   lastToken = null;
   identity.set(null);
+  // A cleared token must not leave a previous role's feed cached for whatever
+  // token loads next (jsdom/SSR have no `caches`, hence the guard).
+  if (typeof caches !== "undefined") void caches.delete("sidekick-feed");
 }
 
 /** Resolve the token's role via GET /me. No-op for a repeat token; on failure the
@@ -61,8 +64,12 @@ export async function loadIdentity(token: string): Promise<void> {
   if (t === lastToken) return;
   lastToken = t;
   // A genuinely new token starts loading — a stale role from the previous
-  // token must never drive routing while this one resolves.
+  // token must never drive routing while this one resolves. Also drop any
+  // cached /api/feed response: it may hold the previous token's role's data
+  // (the SW cache is keyed by URL only, not by Authorization header), and
+  // serving it to a different-role session offline would leak it.
   identity.set(null);
+  if (typeof caches !== "undefined") void caches.delete("sidekick-feed");
   generation++;
   const currentGeneration = generation;
   try {

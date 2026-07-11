@@ -2,8 +2,9 @@
 of the ledger; this layer only routes requests, enforces bearer auth and idempotency,
 and publishes each change to git. Mutations are serialized by an inter-process vault lock
 (shared with the periodic sync job — see server/sync_pull.py); still run with a single
-worker (the idempotency store is per-process). Phase 1: GET /feed here; the write
-endpoints are added in Task 5."""
+worker (the idempotency store is per-process). Tokens map to identities (name + role);
+role `shared` sees and touches ONLY shared tasks — enforced HERE (the PWA's hiding is
+convenience, not security)."""
 import os
 import sys
 
@@ -53,7 +54,11 @@ def create_app(config=None):
 
     @app.get("/feed")
     def get_feed(authorization: str = Header(default="")):
-        require_auth(authorization)
+        ident = require_auth(authorization)
+        if ident["role"] == "shared":
+            # her page doesn't need the game feed; personal data never leaves the host
+            return {"events": [],
+                    "active": [a for a in sidekick.read_active() if a["shared"]]}
         return {"events": sidekick.read_ledger(), "active": sidekick.read_active()}
 
     def _read_json(request_body):
@@ -73,7 +78,7 @@ def create_app(config=None):
     async def post_task(request: Request,
                         authorization: str = Header(default=""),
                         idempotency_key: str = Header(default="")):
-        require_auth(authorization)
+        identity = require_auth(authorization)
         try:
             data = _read_json(await request.json())
         except Exception:
@@ -85,10 +90,14 @@ def create_app(config=None):
         if category not in VALID_CATEGORIES:
             raise HTTPException(status_code=400,
                                 detail=f"category must be one of {sorted(VALID_CATEGORIES)}")
+        # role `shared` is forced onto the shared list; role `full` may opt in.
+        # `from` is ALWAYS the token identity — never client-supplied (spec SP2).
+        shared = True if identity["role"] == "shared" else bool(data.get("shared"))
 
         def run():
             with vault_lock(config.vault):
-                tid = sidekick.create_task(title, category)
+                tid = sidekick.create_task(title, category,
+                                           from_=identity["name"], shared=shared)
                 sidekick.regenerate()
                 git_sync.commit_and_push(config.vault, f"api: new {tid}",
                                          push=config.push, remote=config.remote)
@@ -101,7 +110,7 @@ def create_app(config=None):
     async def post_complete(task_id: str, request: Request,
                             authorization: str = Header(default=""),
                             idempotency_key: str = Header(default="")):
-        require_auth(authorization)
+        identity = require_auth(authorization)
         try:
             data = _read_json(await request.json())
         except Exception:
@@ -110,6 +119,14 @@ def create_app(config=None):
 
         def run():
             with vault_lock(config.vault):
+                if identity["role"] == "shared":
+                    # a personal task must be indistinguishable from a missing one
+                    try:
+                        fm, _ = sidekick.read_note(sidekick.task_path(task_id))
+                    except FileNotFoundError:
+                        raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
+                    if not fm.get("shared"):
+                        raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
                 try:
                     result = sidekick.complete(task_id, completed_at=completed_at)
                 except FileNotFoundError:

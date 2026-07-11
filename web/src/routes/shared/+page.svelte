@@ -50,6 +50,7 @@
     tasks = tasks.filter(t => t.id !== id);              // optimistic
     try {
       await completeTask(id, new Date().toISOString());
+      await load();                                       // reconcile: fetch new items from other user
     } catch (e) {
       tasks = newestFirst([removed, ...tasks]);          // roll back
       error = e instanceof Error ? e.message : "couldn't complete — try again";

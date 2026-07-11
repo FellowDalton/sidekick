@@ -53,10 +53,45 @@ describe("Shared list", () => {
   });
 
   it("ticking a checkbox completes the task and removes it", async () => {
+    const feedAfterComplete: Feed = {
+      events: [],
+      active: [
+        { id: "old", task: "Old shared", category: "chore", sat_for_hours: 50, plan: null, from: "dalton", shared: true },
+        { id: "personal", task: "Personal thing", category: "admin", sat_for_hours: 10, plan: null, from: "dalton", shared: false }
+      ]
+    };
+
+    // On first call (mount), return original feed; on second call (after tick), return feed without the completed item
+    vi.mocked(getFeed).mockResolvedValueOnce(feed).mockResolvedValueOnce(feedAfterComplete);
+
     render(SharedPage);
     await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
+
     await fireEvent.click(screen.getByRole("checkbox", { name: /complete new shared/i }));
     await waitFor(() => expect(completeTask).toHaveBeenCalledWith("new", expect.any(String)));
     expect(screen.queryByText("New shared")).toBeNull();
+  });
+
+  it("after a successful tick, reconciles feed (fetches new items from other person)", async () => {
+    const feedAfterComplete: Feed = {
+      events: [],
+      active: [
+        { id: "old", task: "Old shared", category: "chore", sat_for_hours: 50, plan: null, from: "dalton", shared: true },
+        { id: "personal", task: "Personal thing", category: "admin", sat_for_hours: 10, plan: null, from: "dalton", shared: false },
+        { id: "wife-added", task: "Wife just added this", category: "chore", sat_for_hours: 2, plan: null, from: "wife", shared: true }
+      ]
+    };
+
+    // On first call (mount), return original feed; on second call (after tick), return feed with new item from other person
+    vi.mocked(getFeed).mockResolvedValueOnce(feed).mockResolvedValueOnce(feedAfterComplete);
+
+    render(SharedPage);
+    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
+    expect(screen.queryByText("Wife just added this")).toBeNull();
+
+    await fireEvent.click(screen.getByRole("checkbox", { name: /complete new shared/i }));
+    await waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText("New shared")).toBeNull();
+    expect(screen.getByText("Wife just added this")).toBeInTheDocument();
   });
 });

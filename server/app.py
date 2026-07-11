@@ -64,21 +64,24 @@ def create_app(config=None):
     def _read_json(request_body):
         return request_body if isinstance(request_body, dict) else {}
 
-    def _idem_replay_or_run(idem_key, fn):
-        if idem_key:
-            prior = idem.get(idem_key)
+    def _idem_replay_or_run(scope, idem_key, fn):
+        """Replay cached response or run fn, keying by (scope, idem_key) to prevent cross-identity cache hits.
+        scope: f"{ident['name']}:{request.url.path}" to scope cache to identity + endpoint."""
+        store_key = f"{scope}:{idem_key}" if idem_key else None
+        if store_key:
+            prior = idem.get(store_key)
             if prior is not None:
                 return JSONResponse(status_code=prior["status_code"], content=prior["body"])
         status_code, body = fn()   # fn() may raise HTTPException (e.g. 404); let it propagate — errors must never be cached
-        if idem_key:
-            idem.put(idem_key, status_code, body)
+        if store_key:
+            idem.put(store_key, status_code, body)
         return JSONResponse(status_code=status_code, content=body)
 
     @app.post("/tasks")
     async def post_task(request: Request,
                         authorization: str = Header(default=""),
                         idempotency_key: str = Header(default="")):
-        identity = require_auth(authorization)
+        ident = require_auth(authorization)
         try:
             data = _read_json(await request.json())
         except Exception:
@@ -92,25 +95,26 @@ def create_app(config=None):
                                 detail=f"category must be one of {sorted(VALID_CATEGORIES)}")
         # role `shared` is forced onto the shared list; role `full` may opt in.
         # `from` is ALWAYS the token identity — never client-supplied (spec SP2).
-        shared = True if identity["role"] == "shared" else bool(data.get("shared"))
+        shared = True if ident["role"] == "shared" else bool(data.get("shared"))
 
         def run():
             with vault_lock(config.vault):
                 tid = sidekick.create_task(title, category,
-                                           from_=identity["name"], shared=shared)
+                                           from_=ident["name"], shared=shared)
                 sidekick.regenerate()
                 git_sync.commit_and_push(config.vault, f"api: new {tid}",
                                          push=config.push, remote=config.remote)
                 entry = next((a for a in sidekick.read_active() if a["id"] == tid), None)
             return 201, entry
 
-        return _idem_replay_or_run(idempotency_key, run)
+        scope = f"{ident['name']}:{request.url.path}"
+        return _idem_replay_or_run(scope, idempotency_key, run)
 
     @app.post("/tasks/{task_id}/complete")
     async def post_complete(task_id: str, request: Request,
                             authorization: str = Header(default=""),
                             idempotency_key: str = Header(default="")):
-        identity = require_auth(authorization)
+        ident = require_auth(authorization)
         try:
             data = _read_json(await request.json())
         except Exception:
@@ -119,7 +123,7 @@ def create_app(config=None):
 
         def run():
             with vault_lock(config.vault):
-                if identity["role"] == "shared":
+                if ident["role"] == "shared":
                     # a personal task must be indistinguishable from a missing one
                     try:
                         fm, _ = sidekick.read_note(sidekick.task_path(task_id))
@@ -136,6 +140,7 @@ def create_app(config=None):
                                          push=config.push, remote=config.remote)
             return 200, result
 
-        return _idem_replay_or_run(idempotency_key, run)
+        scope = f"{ident['name']}:{request.url.path}"
+        return _idem_replay_or_run(scope, idempotency_key, run)
 
     return app

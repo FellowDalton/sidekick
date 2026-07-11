@@ -106,3 +106,32 @@ def test_shared_can_complete_shared_task(roles_client):
 def test_shared_complete_unknown_task_404(roles_client):
     r = roles_client.post("/tasks/nope/complete", json={}, headers=SHARED)
     assert r.status_code == 404
+
+
+def test_idempotency_cache_is_scoped_per_identity(roles_client):
+    """Verify that idempotency cache is keyed by (identity, endpoint), not just idem_key.
+    A FULL-role request and a SHARED-role request with the SAME idem_key must produce
+    separate responses, not a replay."""
+    same_key = {"Idempotency-Key": "test-key-xyz"}
+
+    # FULL role posts a task with idem key
+    r1_with_key = roles_client.post("/tasks",
+                                    json={"title": "Full task", "category": "admin"},
+                                    headers={**FULL, **same_key})
+    assert r1_with_key.status_code == 201
+    full_response = r1_with_key.json()
+    full_id = full_response["id"]
+    assert full_response["from"] == "dalton"
+    assert full_response["shared"] is False
+
+    # SHARED role posts a task with the SAME idem key
+    r2 = roles_client.post("/tasks",
+                           json={"title": "Wife task", "category": "chore"},
+                           headers={**SHARED, **same_key})
+
+    # Should NOT be a replay of r1 — must be a new task (201, from="wife")
+    assert r2.status_code == 201
+    wife_response = r2.json()
+    assert wife_response["from"] == "wife"
+    assert wife_response["shared"] is True
+    assert wife_response["id"] != full_id  # Different tasks (different cache scope)

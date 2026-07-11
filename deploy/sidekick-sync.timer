@@ -1,0 +1,10 @@
+[Unit]
+Description=Run sidekick vault sync every 3 minutes
+
+[Timer]
+OnCalendar=*:0/3
+RandomizedDelaySec=15
+Persistent=true
+
+[Install]
+WantedBy=timers.target

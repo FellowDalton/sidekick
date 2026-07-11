@@ -58,3 +58,32 @@ def test_bad_role_raises(tmp_path):
 def test_missing_name_raises(tmp_path):
     with pytest.raises(RuntimeError):
         Config(vault=str(tmp_path), tokens={"t": {"role": "full"}})
+
+
+def test_env_tokens_null_does_not_fall_back(tmp_path, monkeypatch):
+    """SIDEKICK_API_TOKENS=null must not silently fall back to SIDEKICK_API_TOKEN."""
+    monkeypatch.setenv("SIDEKICK_API_TOKENS", "null")
+    monkeypatch.setenv("SIDEKICK_API_TOKEN", "t-legacy")
+    with pytest.raises(RuntimeError, match="must be a JSON object"):
+        Config(vault=str(tmp_path))
+
+
+def test_env_tokens_array_raises(tmp_path, monkeypatch):
+    """SIDEKICK_API_TOKENS as array must raise, not fall back."""
+    monkeypatch.setenv("SIDEKICK_API_TOKENS", "[1, 2, 3]")
+    with pytest.raises(RuntimeError, match="must be a JSON object"):
+        Config(vault=str(tmp_path))
+
+
+def test_env_tokens_string_raises(tmp_path, monkeypatch):
+    """SIDEKICK_API_TOKENS as string must raise, not fall back."""
+    monkeypatch.setenv("SIDEKICK_API_TOKENS", '"abc"')
+    with pytest.raises(RuntimeError, match="must be a JSON object"):
+        Config(vault=str(tmp_path))
+
+
+def test_env_tokens_number_raises(tmp_path, monkeypatch):
+    """SIDEKICK_API_TOKENS as number must raise, not fall back."""
+    monkeypatch.setenv("SIDEKICK_API_TOKENS", "123")
+    with pytest.raises(RuntimeError, match="must be a JSON object"):
+        Config(vault=str(tmp_path))

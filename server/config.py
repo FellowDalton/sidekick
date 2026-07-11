@@ -35,9 +35,15 @@ class Config:
             raw = os.environ.get("SIDEKICK_API_TOKENS")
             if raw:
                 try:
-                    tokens = json.loads(raw)
+                    parsed = json.loads(raw)
                 except json.JSONDecodeError as e:
                     raise RuntimeError(f"SIDEKICK_API_TOKENS is not valid JSON: {e}")
+                # If SIDEKICK_API_TOKENS is set, it MUST parse to a JSON object (dict).
+                # Never silently fall back to SIDEKICK_API_TOKEN for any other type.
+                if not isinstance(parsed, dict):
+                    raise RuntimeError(
+                        "SIDEKICK_API_TOKENS must be a JSON object mapping token -> {name, role}")
+                tokens = parsed
         if tokens is None:
             legacy = os.environ.get("SIDEKICK_API_TOKEN")
             if legacy:

@@ -39,7 +39,8 @@ def create_app(config=None):
         return JSONResponse(status_code=409, content={"error": str(exc)})
 
     def require_auth(authorization):
-        if authorization != f"Bearer {config.token}":
+        if not (authorization.startswith("Bearer ")
+                and authorization[len("Bearer "):] in config.tokens):
             raise HTTPException(status_code=401, detail="unauthorized")
 
     @app.get("/feed")

@@ -39,9 +39,17 @@ def create_app(config=None):
         return JSONResponse(status_code=409, content={"error": str(exc)})
 
     def require_auth(authorization):
-        if not (authorization.startswith("Bearer ")
-                and authorization[len("Bearer "):] in config.tokens):
-            raise HTTPException(status_code=401, detail="unauthorized")
+        """Return the calling token's identity {"name", "role"}; 401 on anything else."""
+        if authorization.startswith("Bearer "):
+            ident = config.tokens.get(authorization[len("Bearer "):])
+            if ident is not None:
+                return ident
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+    @app.get("/me")
+    def get_me(authorization: str = Header(default="")):
+        ident = require_auth(authorization)
+        return {"name": ident["name"], "role": ident["role"]}
 
     @app.get("/feed")
     def get_feed(authorization: str = Header(default="")):

@@ -127,6 +127,24 @@ So edits you make in Obsidian sync with the host through GitHub:
 `ledger.jsonl` already uses git's built-in `union` merge driver (`.gitattributes`), so the
 host's and the Mac's concurrent appends merge without conflicts — nothing extra to install.
 
+## Enable the sync timer (two-way sync)
+
+The API publishes on every write, but only the timer brings in commits pushed
+from elsewhere (the Mac, claude.ai/code, the agent). On the VPS:
+
+    sudo cp deploy/sidekick-sync.service deploy/sidekick-sync.timer /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now sidekick-sync.timer
+
+Verify:
+
+    systemctl list-timers sidekick-sync.timer     # next run scheduled
+    sudo systemctl start sidekick-sync.service    # run once now
+    journalctl -u sidekick-sync.service -n 5      # expect "sync-pull: updated|unchanged"
+
+A conflicting pull exits 1 with the vault left clean (rebase aborted); check
+`journalctl -u sidekick-sync.service` if the phones stop seeing Mac-side changes.
+
 ---
 
 ## Operating notes

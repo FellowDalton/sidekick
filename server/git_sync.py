@@ -46,3 +46,20 @@ def commit_and_push(repo, message, *, push=True, remote="origin", retries=3):
             subprocess.run(["git", "rebase", "--abort"], cwd=repo,
                            capture_output=True, text=True)
     raise GitSyncError(f"push failed after {retries} retries: {last}")
+
+
+def pull_latest(repo, *, remote="origin"):
+    """Bring the clone up to date with the remote (the periodic-sync half of the
+    two-way flow; commit_and_push is the publish half). Returns "updated" if HEAD
+    moved, "unchanged" otherwise. On rebase conflict the rebase is aborted — the
+    tree is never left mid-rebase — and GitSyncError propagates to the caller."""
+    branch = current_branch(repo)
+    before = _run(["rev-parse", "HEAD"], repo)
+    try:
+        _run(["pull", "--rebase", remote, branch], repo)
+    except GitSyncError:
+        subprocess.run(["git", "rebase", "--abort"], cwd=repo,
+                       capture_output=True, text=True)
+        raise
+    after = _run(["rev-parse", "HEAD"], repo)
+    return "updated" if after != before else "unchanged"

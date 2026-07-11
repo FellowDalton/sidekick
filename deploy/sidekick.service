@@ -10,7 +10,8 @@ User=sidekick
 Group=sidekick
 WorkingDirectory=/srv/sidekick
 EnvironmentFile=/etc/sidekick.env
-# Single worker on purpose: the write lock that serializes ledger appends is per-process.
+# Single worker on purpose: the idempotency store is per-process (writes are
+# serialized by the inter-process vault lock, shared with sidekick-sync).
 ExecStart=/srv/sidekick/.venv/bin/uvicorn server.app:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 Restart=always
 RestartSec=2

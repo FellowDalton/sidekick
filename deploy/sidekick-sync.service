@@ -1,0 +1,20 @@
+[Unit]
+Description=Sidekick vault sync (git pull --rebase under the write lock)
+Documentation=https://github.com/FellowDalton/sidekick/blob/main/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sidekick
+Group=sidekick
+WorkingDirectory=/srv/sidekick
+EnvironmentFile=/etc/sidekick.env
+ExecStart=/srv/sidekick/.venv/bin/python -m server.sync_pull
+# oneshot defaults to TimeoutStartSec=infinity; a hung pull would hold the
+# vault lock and block the API — kill it (killing releases the flock).
+TimeoutStartSec=120
+# Same hardening posture as sidekick.service: only its own clone.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true

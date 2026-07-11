@@ -1,10 +1,11 @@
 """The host HTTP API: a thin wrapper over sidekick.py. The engine stays the SOLE writer
 of the ledger; this layer only routes requests, enforces bearer auth and idempotency,
-and publishes each change to git. Mutations are serialized by a write lock — run with a
-single worker. Phase 1: GET /feed here; the write endpoints are added in Task 5."""
+and publishes each change to git. Mutations are serialized by an inter-process vault lock
+(shared with the periodic sync job — see server/sync_pull.py); still run with a single
+worker (the idempotency store is per-process). Phase 1: GET /feed here; the write
+endpoints are added in Task 5."""
 import os
 import sys
-import threading
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -15,6 +16,7 @@ import sidekick                       # noqa: E402
 from server.config import load_config  # noqa: E402
 from server import git_sync            # noqa: E402
 from server.idempotency import IdempotencyStore  # noqa: E402
+from server.vault_lock import vault_lock  # noqa: E402
 
 VALID_CATEGORIES = {"phone", "admin", "errand", "chore"}
 
@@ -23,12 +25,10 @@ def create_app(config=None):
     config = config or load_config()
     sidekick.configure(config.vault)
     idem = IdempotencyStore(os.path.join(config.vault, ".sidekick-idempotency.json"))
-    write_lock = threading.Lock()
 
     app = FastAPI(title="Sidekick host API")
     app.state.config = config
     app.state.idem = idem
-    app.state.write_lock = write_lock
 
     @app.exception_handler(HTTPException)
     async def _http_exc(request: Request, exc: HTTPException):
@@ -78,7 +78,7 @@ def create_app(config=None):
                                 detail=f"category must be one of {sorted(VALID_CATEGORIES)}")
 
         def run():
-            with write_lock:
+            with vault_lock(config.vault):
                 tid = sidekick.create_task(title, category)
                 sidekick.regenerate()
                 git_sync.commit_and_push(config.vault, f"api: new {tid}",
@@ -100,7 +100,7 @@ def create_app(config=None):
         completed_at = data.get("completed_at")
 
         def run():
-            with write_lock:
+            with vault_lock(config.vault):
                 try:
                     result = sidekick.complete(task_id, completed_at=completed_at)
                 except FileNotFoundError:

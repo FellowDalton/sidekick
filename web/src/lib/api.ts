@@ -31,11 +31,17 @@ export async function getFeed(): Promise<Feed> {
   return handle(await fetch(`${base()}/api/feed`, { headers: headers() }));
 }
 
-export async function createTask(title: string, category: Category): Promise<ActiveTask> {
+export interface Identity { name: string; role: "full" | "shared"; }
+
+export async function getMe(): Promise<Identity> {
+  return handle(await fetch(`${base()}/api/me`, { headers: headers() }));
+}
+
+export async function createTask(title: string, category: Category, shared = false): Promise<ActiveTask> {
   return handle(await fetch(`${base()}/api/tasks`, {
     method: "POST",
     headers: headers({ "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }),
-    body: JSON.stringify({ title, category })
+    body: JSON.stringify(shared ? { title, category, shared: true } : { title, category })
   }));
 }
 

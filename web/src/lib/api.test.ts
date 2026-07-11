@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getFeed, createTask, completeTask, ApiError } from "./api";
+import { getFeed, getMe, createTask, completeTask, ApiError } from "./api";
 import { settings } from "./settings";
 
 function mockFetch(status: number, body: unknown) {
@@ -58,5 +58,43 @@ describe("completeTask", () => {
     const [url, opts] = f.mock.calls[0];
     expect(url).toBe("/api/tasks/x/complete");
     expect(JSON.parse(opts.body)).toEqual({ completed_at: "2026-06-20T10:00:00Z" });
+  });
+});
+
+describe("getMe", () => {
+  it("calls /api/me with the bearer token and returns the identity", async () => {
+    const f = mockFetch(200, { name: "wife", role: "shared" });
+    vi.stubGlobal("fetch", f);
+    const me = await getMe();
+    expect(me).toEqual({ name: "wife", role: "shared" });
+    const [url, opts] = f.mock.calls[0];
+    expect(url).toBe("/api/me");
+    expect(opts.headers["Authorization"]).toBe("Bearer t0ken");
+  });
+
+  it("throws ApiError(401) on an unknown token", async () => {
+    vi.stubGlobal("fetch", mockFetch(401, { error: "unauthorized" }));
+    await expect(getMe()).rejects.toMatchObject({ status: 401 });
+  });
+});
+
+describe("createTask (shared)", () => {
+  it("includes shared: true in the body when asked", async () => {
+    const f = mockFetch(201, {
+      id: "s1", task: "Buy milk", category: "chore", sat_for_hours: 0,
+      plan: null, from: "wife", shared: true
+    });
+    vi.stubGlobal("fetch", f);
+    await createTask("Buy milk", "chore", true);
+    const [, opts] = f.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual({ title: "Buy milk", category: "chore", shared: true });
+  });
+
+  it("omits shared from the body by default (backward compatible)", async () => {
+    const f = mockFetch(201, { id: "x", task: "Buy milk", category: "errand", sat_for_hours: 0, plan: null });
+    vi.stubGlobal("fetch", f);
+    await createTask("Buy milk", "errand");
+    const [, opts] = f.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual({ title: "Buy milk", category: "errand" });
   });
 });

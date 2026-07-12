@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Feed } from "$lib/types";
   import { hero, branchVMs, recentLog, catHue, dur } from "$lib/game";
+  import { computeStats, WEEKDAY_NAMES } from "$lib/stats";
 
   let { feed, onComplete = (_id: string) => {}, pending = new Set<string>() }:
     { feed: Feed; onComplete?: (id: string) => void; pending?: Set<string> } = $props();
@@ -8,6 +9,8 @@
   const h = $derived(hero(feed));
   const branches = $derived(branchVMs(feed));
   const log = $derived(recentLog(feed, 7));
+  const stats = $derived(computeStats(feed.events));
+  const wkMax = $derived(Math.max(1, ...stats.byWeekday));
   const R = 52, C = 2 * Math.PI * R;
 
   function safeHref(h: string | undefined): string | null {
@@ -80,6 +83,19 @@
       </div>
     {/if}
   {/each}
+</section>
+
+<div class="head"><h2>Patterns</h2><span class="rule"></span></div>
+<section class="section patterns">
+  <div class="stat"><div class="slabel">Streak</div><div class="sval">{stats.streakDays}d</div><div class="ssub">consecutive days cleared · UTC</div></div>
+  <div class="stat"><div class="slabel">Median to done</div><div class="sval">{dur(stats.medianSatHours)}</div><div class="ssub">capture → cleared</div></div>
+  <div class="stat"><div class="slabel">Top category</div>
+    <div class="sval sm">{stats.byCategory[0]?.[0] ?? "—"}</div>
+    <div class="ssub">{stats.byCategory.map(([c, n]) => `${c} ${n}`).join(" · ") || "nothing yet"}</div></div>
+  <div class="stat"><div class="slabel">By weekday</div>
+    <div class="wk">{#each stats.byWeekday as v}<i style="height:{Math.round((v / wkMax) * 100)}%"></i>{/each}</div>
+    <div class="wkl">{#each WEEKDAY_NAMES as n}<span>{n}</span>{/each}</div>
+    <div class="ssub">UTC days</div></div>
 </section>
 
 <div class="head"><h2>Recently cleared</h2><span class="rule"></span></div>

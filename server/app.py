@@ -5,6 +5,7 @@ and publishes each change to git. Mutations are serialized by an inter-process v
 worker (the idempotency store is per-process). Tokens map to identities (name + role);
 role `shared` sees and touches ONLY shared tasks — enforced HERE (the PWA's hiding is
 convenience, not security)."""
+import datetime as dt
 import os
 import sys
 
@@ -120,6 +121,24 @@ def create_app(config=None):
         except Exception:
             data = {}
         completed_at = data.get("completed_at")
+        if completed_at is not None:
+            bad = HTTPException(status_code=400,
+                                detail="completed_at must be an ISO-8601 string with timezone")
+            if not isinstance(completed_at, str):
+                raise bad
+            try:
+                parsed = dt.datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
+            except ValueError:
+                raise bad
+            if parsed.utcoffset() is None:
+                raise bad
+        note = data.get("note")
+        if not (isinstance(note, str) and note.strip()):
+            note = None            # never forward junk/empty into the ledger
+        if note is not None:
+            note = note.strip()
+            if len(note) > 2000:
+                raise HTTPException(status_code=400, detail="note must be at most 2000 characters")
 
         def run():
             with vault_lock(config.vault):
@@ -132,7 +151,8 @@ def create_app(config=None):
                     if not fm.get("shared"):
                         raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
                 try:
-                    result = sidekick.complete(task_id, completed_at=completed_at)
+                    result = sidekick.complete(task_id, completed_at=completed_at,
+                                               note=note, via="phone")
                 except FileNotFoundError:
                     raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
                 sidekick.regenerate()

@@ -12,7 +12,8 @@ Commands (Claude Code runs these):
     python sidekick.py regenerate                 # the assembler — rebuild the feed
     python sidekick.py new "Call the dentist" --category phone
     python sidekick.py set-plan <id> --file plan.json     # or pipe JSON on stdin
-    python sidekick.py complete <id>              # -> appends to ledger, marks done
+    python sidekick.py complete <id> [--note "<what worked>"] [--via cli|phone|agent]
+                                                  # -> appends to ledger, marks done
 
 Setup:
     pip install pyyaml          # the only dependency
@@ -133,11 +134,16 @@ def set_plan(task_id, summary, steps):
     write_note(task_path(task_id), fm, body)
     print(f"plan set on {task_id}")
 
-def complete(task_id, completed_at=None):
+def complete(task_id, completed_at=None, note=None, via=None):
     """Append the completion event to the ledger (its only writer), then mark the
     task done. Idempotent: an already-done task is NOT re-appended. `completed_at` (ISO
     string) lets a caller (e.g. the phone) stamp the moment of completion; defaults to
-    now. Returns a result dict. Raises FileNotFoundError if the task file is absent."""
+    now. `note` (what worked / what happened) and `via` (cli|phone|agent) are optional
+    learning-layer fields; `from` is copied from task frontmatter when present (who
+    captured the task — written by the shared-list layer). All three are OMITTED when
+    absent, never null — old and new ledger lines stay shape-compatible, and readers
+    must tolerate missing fields. Returns a result dict. Raises FileNotFoundError if
+    the task file is absent."""
     fm, body = read_note(task_path(task_id))
     title = next((l[2:].strip() for l in body.splitlines() if l.startswith("# ")), task_id)
     if fm.get("status") == "done":
@@ -153,6 +159,12 @@ def complete(task_id, completed_at=None):
         "sat_for_hours": hours_since(fm.get("created")),
         "orchestrator": (plan or {}).get("summary"),   # what the orchestrator did to help (§6)
     }
+    if note:
+        event["note"] = note
+    if via:
+        event["via"] = via
+    if fm.get("from"):
+        event["from"] = fm["from"]
     with open(LEDGER, "a", encoding="utf-8") as f:       # append-only, code-only
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
     fm["status"] = "done"
@@ -204,10 +216,77 @@ def read_ledger():
                          "Fix it; refusing to write a partial feed.")
     return events
 
+# ── stats (deterministic aggregates over the ledger) ─────────────────────────
+def _parse_completed_at(iso):
+    """UTC datetime from a ledger completed_at, or None if absent/malformed.
+    Naive stamps are assumed UTC (the engine always writes Z)."""
+    if not iso or not isinstance(iso, str):
+        return None
+    try:
+        t = dt.datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=dt.timezone.utc)
+    return t.astimezone(dt.timezone.utc)
+
+
+def compute_stats(events, today=None):
+    """Deterministic aggregates for the dashboards' stats panel (spec sub-project 5).
+    Pure function of (events, today) — `today` (a dt.date) is injectable for tests;
+    regenerate passes nothing and gets the current UTC date. All calendar math is UTC
+    because completed_at is stored as UTC ISO; a late evening in Copenhagen (UTC+1/+2)
+    can bin to an earlier UTC hour / previous UTC day — accepted and labeled "UTC" in
+    the UIs rather than guessing a display timezone here. Tolerates pre-learning-layer
+    ledger lines: every field may be missing. NO model logic — deterministic only."""
+    today = today or dt.datetime.now(dt.timezone.utc).date()
+    total = 0
+    by_category = {}
+    sat = []
+    by_weekday = [0] * 7            # Monday..Sunday, matching datetime.weekday()
+    by_hour = [0] * 24              # 00..23 UTC
+    days = set()
+    for e in events:
+        if not isinstance(e, dict):
+            continue                # defensive: a ledger line that parsed to a non-object
+        total += 1
+        cat = e.get("category") or "uncategorized"
+        by_category[cat] = by_category.get(cat, 0) + 1
+        h = e.get("sat_for_hours")
+        if isinstance(h, (int, float)) and not isinstance(h, bool):
+            sat.append(h)
+        t = _parse_completed_at(e.get("completed_at"))
+        if t is not None:
+            by_weekday[t.weekday()] += 1
+            by_hour[t.hour] += 1
+            days.add(t.date())
+    # current streak: consecutive UTC days with >=1 completion, counted back from
+    # today — or from yesterday when today is still empty (an empty today doesn't
+    # break the streak until the day is over).
+    streak = 0
+    day = today if today in days else today - dt.timedelta(days=1)
+    while day in days:
+        streak += 1
+        day -= dt.timedelta(days=1)
+    median = None
+    if sat:
+        s = sorted(sat)
+        mid = len(s) // 2
+        median = s[mid] if len(s) % 2 else (s[mid - 1] + s[mid]) / 2
+    return {
+        "total": total,
+        "by_category": dict(sorted(by_category.items())),   # sorted keys => byte-stable JSON
+        "median_sat_hours": median,
+        "by_weekday": by_weekday,
+        "by_hour": by_hour,
+        "streak_days": streak,
+    }
+
 def regenerate():
     """Build sidekick-data.js from open task files (+ their plans) and the ledger.
     Regenerates the DATA only — sidekick.html is static and never touched."""
-    payload = {"events": read_ledger(), "active": read_active()}
+    events = read_ledger()
+    payload = {"events": events, "active": read_active(), "stats": compute_stats(events)}
     banner = ("/* GENERATED by sidekick.py — do not hand-edit. "
               f"{now_iso()} | {len(payload['events'])} events, {len(payload['active'])} open */\n")
     js = banner + "window.SIDEKICK = " + json.dumps(payload, ensure_ascii=False, indent=2) + ";\n"
@@ -294,6 +373,9 @@ def main():
     pn.add_argument("--shared", action="store_true", help="put it on the shared list")
     pp = sub.add_parser("set-plan"); pp.add_argument("id"); pp.add_argument("--file", help="JSON {summary, steps}; omit to read stdin")
     pc = sub.add_parser("complete"); pc.add_argument("id")
+    pc.add_argument("--note", help="what worked / what happened — recorded in the ledger event")
+    pc.add_argument("--via", choices=["cli", "phone", "agent"], default="cli",
+                    help="which surface completed it (default: cli)")
     a = ap.parse_args()
 
     if a.cmd == "regenerate":
@@ -307,7 +389,7 @@ def main():
         plan = json.loads(raw)
         set_plan(a.id, plan["summary"], plan["steps"]); regenerate()
     elif a.cmd == "complete":
-        complete(a.id); regenerate()
+        complete(a.id, note=a.note, via=a.via); regenerate()
 
 if __name__ == "__main__":
     main()

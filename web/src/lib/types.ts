@@ -19,6 +19,10 @@ export interface LedgerEvent {
   completed_at: string;
   sat_for_hours: number | null;
   orchestrator?: string | null;
+  /* learning-layer fields — absent on pre-learning-layer ledger lines */
+  note?: string | null;
+  via?: string | null;
+  from?: string | null;
 }
 
 export interface Feed { events: LedgerEvent[]; active: ActiveTask[]; }

@@ -106,6 +106,16 @@
   .branch.unlit .invite{ font-size:12px; color:var(--bone-dim); margin-top:10px; position:relative; line-height:1.45; }
   @keyframes kindle{ from{ opacity:0; transform:translateY(6px); } to{ opacity:1; transform:none; } }
   .branch.lit{ opacity:0; animation:kindle .55s ease forwards; }
+  .patterns{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+  .stat{ background:var(--ink-raised); border:1px solid var(--line); border-radius:14px; padding:16px 16px 18px; }
+  .stat .slabel{ font-size:11px; letter-spacing:.26em; text-transform:uppercase; color:var(--bone-dim); font-weight:600; }
+  .stat .sval{ font-family:var(--display); font-weight:500; font-size:34px; color:var(--brass-soft); margin-top:6px; }
+  .stat .sval.sm{ font-size:21px; color:var(--bone); }
+  .stat .ssub{ font-family:var(--mono); font-size:11px; color:var(--bone-faint); margin-top:6px; line-height:1.5; }
+  .stat .wk{ display:flex; gap:4px; align-items:flex-end; height:36px; margin-top:12px; }
+  .stat .wk i{ flex:1; background:var(--brass); opacity:.8; border-radius:2px 2px 0 0; min-height:2px; }
+  .stat .wkl{ display:flex; gap:4px; margin-top:4px; }
+  .stat .wkl span{ flex:1; text-align:center; font-family:var(--mono); font-size:9px; color:var(--bone-faint); }
 
   .row{ display:flex; align-items:center; gap:12px; padding:11px 2px; border-bottom:1px solid var(--line-soft); }
   .row:last-child{ border-bottom:0; }
@@ -159,6 +169,9 @@
 
   <div class="head"><h2>Skill branches</h2><span class="rule"></span></div>
   <section class="section branches" id="branches"></section>
+
+  <div class="head" id="patternsHead"><h2>Patterns</h2><span class="rule"></span></div>
+  <section class="section patterns" id="patterns"></section>
 
   <div class="head"><h2>Recently cleared</h2><span class="rule"></span></div>
   <section class="section" id="log"></section>

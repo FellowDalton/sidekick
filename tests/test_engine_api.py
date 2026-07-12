@@ -52,6 +52,33 @@ class EngineApiExtensions(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             sidekick.complete("nope-does-not-exist")
 
+    def test_complete_records_note_and_via(self):
+        tid = sidekick.create_task("Fix bike light", "chore")
+        sidekick.complete(tid, note="battery is CR2032", via="cli")
+        event = json.loads(self._ledger_lines()[0])
+        self.assertEqual(event["note"], "battery is CR2032")
+        self.assertEqual(event["via"], "cli")
+
+    def test_complete_omits_absent_optional_fields(self):
+        # regression guard: old-format lines must stay reproducible — no null-stuffing
+        tid = sidekick.create_task("Water plants", "chore")
+        sidekick.complete(tid)
+        event = json.loads(self._ledger_lines()[0])
+        self.assertNotIn("note", event)
+        self.assertNotIn("via", event)
+        self.assertNotIn("from", event)
+
+    def test_complete_copies_from_frontmatter(self):
+        # sub-project 2 writes `from:` into frontmatter; complete() copies it if present
+        tid = sidekick.create_task("Buy milk", "errand")
+        path = sidekick.task_path(tid)
+        fm, body = sidekick.read_note(path)
+        fm["from"] = "wife"
+        sidekick.write_note(path, fm, body)
+        sidekick.complete(tid)
+        event = json.loads(self._ledger_lines()[0])
+        self.assertEqual(event["from"], "wife")
+
 
 if __name__ == "__main__":
     unittest.main()

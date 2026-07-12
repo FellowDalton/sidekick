@@ -98,3 +98,14 @@ a{ color:var(--brass-soft); }
 @media (prefers-reduced-motion:reduce){
   .sigil .arc, .branch .bar > i{ transition:none; }
 }
+
+.patterns{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; }
+.stat{ background:var(--ink-raised); border:1px solid var(--line); border-radius:14px; padding:14px; }
+.stat .slabel{ font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--bone-dim); font-weight:600; }
+.stat .sval{ font-family:var(--display); font-size:30px; color:var(--brass-soft); margin-top:4px; }
+.stat .sval.sm{ font-size:19px; color:var(--bone); }
+.stat .ssub{ font-family:var(--mono); font-size:11px; color:var(--bone-faint); margin-top:6px; line-height:1.5; }
+.stat .wk{ display:flex; gap:4px; align-items:flex-end; height:32px; margin-top:10px; }
+.stat .wk i{ flex:1; background:var(--brass); opacity:.8; border-radius:2px 2px 0 0; min-height:2px; }
+.stat .wkl{ display:flex; gap:4px; margin-top:4px; }
+.stat .wkl span{ flex:1; text-align:center; font-family:var(--mono); font-size:9px; color:var(--bone-faint); }

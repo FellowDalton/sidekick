@@ -225,10 +225,6 @@ def create_app(config=None, agent_jobs=None):
         if action not in VALID_AGENT_ACTIONS:
             raise HTTPException(status_code=400,
                                 detail=f"action must be one of {sorted(VALID_AGENT_ACTIONS)}")
-        if ident["role"] == "shared" and action != "breakdown":
-            # research is full-role only (spec SP2/SP3); rejected at action level
-            # — BEFORE any task lookup — so it can never leak task existence
-            raise HTTPException(status_code=403, detail="forbidden")
         if not AgentJobs.configured():
             raise HTTPException(status_code=503, detail="agent runner not configured")
 
@@ -240,16 +236,25 @@ def create_app(config=None, agent_jobs=None):
                     raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
                 if ident["role"] == "shared" and not fm.get("shared"):
                     # a personal task must be indistinguishable from a missing one
+                    # — checked BEFORE the role/action 403 below, so a shared-role
+                    # caller gets the same 404 whether the task is personal or absent
                     raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
+                if ident["role"] == "shared" and action != "breakdown":
+                    # research is full-role only (spec SP2/SP3); she can see this
+                    # task (it's shared) — the action itself is still full-only
+                    raise HTTPException(status_code=403, detail="forbidden")
                 if fm.get("status", "open") != "open":
                     raise HTTPException(status_code=409, detail=f"task is not open: {task_id}")
                 title = next((l[2:].strip() for l in body.splitlines()
                               if l.startswith("# ")), task_id)
                 shared = bool(fm.get("shared"))
                 category = fm.get("category")
-            job = app.state.agent_jobs.enqueue(task_id=task_id, action=action, title=title,
-                                     category=category, shared=shared,
-                                     requested_by=ident["name"])
+                # enqueue INSIDE the lock: a fast, locked store write — closes the
+                # TOCTOU window where a concurrent complete could slip in after
+                # the open/shared checks above but before the job is queued
+                job = app.state.agent_jobs.enqueue(task_id=task_id, action=action, title=title,
+                                         category=category, shared=shared,
+                                         requested_by=ident["name"])
             # NOTE: an idempotent replay returns THIS enqueue-time snapshot
             # (status "queued") — clients poll GET /agent/jobs/{id} for live state
             return 202, job

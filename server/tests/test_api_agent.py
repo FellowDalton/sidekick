@@ -67,9 +67,9 @@ def test_post_agent_done_task_409(agent_api):
     assert r.status_code == 409
 
 
-def test_shared_role_research_403_never_leaks(agent_api, vault_repo):
-    # even on a task she CAN see — research is full-role only, rejected at
-    # action level (before any task lookup, so existence can't leak)
+def test_shared_role_research_403_on_visible_task(agent_api, vault_repo):
+    # a task she CAN see (it's shared) — research is still full-role only,
+    # so the 403 fires, but only AFTER visibility is established
     tid = _new(agent_api, SHARED, title="Buy milk", category="chore")
     r = agent_api.post(f"/tasks/{tid}/agent", json={"action": "research"}, headers=SHARED)
     assert r.status_code == 403
@@ -80,6 +80,28 @@ def test_shared_role_breakdown_personal_task_404(agent_api, vault_repo):
     tid = _new(agent_api, FULL)                       # personal task
     r = agent_api.post(f"/tasks/{tid}/agent", json={"action": "breakdown"}, headers=SHARED)
     assert r.status_code == 404                       # indistinguishable from missing
+    assert load_jobs(str(vault_repo)) == []
+
+
+def test_shared_role_research_personal_task_404_matches_missing(agent_api, vault_repo):
+    # a personal task (created with the FULL token, no shared flag) must be
+    # indistinguishable from a missing one — the 404 must fire BEFORE the
+    # role/action 403, even though `research` would also be forbidden for her
+    tid = _new(agent_api, FULL)                       # personal task
+    r_personal = agent_api.post(f"/tasks/{tid}/agent", json={"action": "research"},
+                                headers=SHARED)
+    r_missing = agent_api.post("/tasks/nope-nope/agent", json={"action": "research"},
+                               headers=SHARED)
+    assert r_personal.status_code == r_missing.status_code == 404
+    assert r_personal.json() == {"error": f"no such task: {tid}"}
+    assert r_missing.json() == {"error": "no such task: nope-nope"}
+    assert load_jobs(str(vault_repo)) == []
+
+
+def test_shared_role_research_missing_task_404(agent_api, vault_repo):
+    r = agent_api.post("/tasks/nope/agent", json={"action": "research"}, headers=SHARED)
+    assert r.status_code == 404
+    assert r.json() == {"error": "no such task: nope"}
     assert load_jobs(str(vault_repo)) == []
 
 

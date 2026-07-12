@@ -113,3 +113,50 @@ def test_complete_note_is_optional_and_never_null(client):
              if e["task"] == "No note")
     assert e["via"] == "phone"
     assert "note" not in e
+
+
+def test_complete_rejects_naive_completed_at(client):
+    tid = client.post("/tasks", json={"title": "Naive stamp", "category": "chore"},
+                      headers=AUTH).json()["id"]
+    r = client.post(f"/tasks/{tid}/complete",
+                    json={"completed_at": "2026-06-20T08:00:00"}, headers=AUTH)
+    assert r.status_code == 400
+    assert "completed_at" in r.json()["error"]
+
+
+def test_complete_rejects_non_string_completed_at(client):
+    tid = client.post("/tasks", json={"title": "Numeric stamp", "category": "chore"},
+                      headers=AUTH).json()["id"]
+    r = client.post(f"/tasks/{tid}/complete",
+                    json={"completed_at": 12345}, headers=AUTH)
+    assert r.status_code == 400
+    assert "completed_at" in r.json()["error"]
+
+
+def test_complete_accepts_valid_z_stamp(client):
+    tid = client.post("/tasks", json={"title": "Valid Z stamp", "category": "chore"},
+                      headers=AUTH).json()["id"]
+    r = client.post(f"/tasks/{tid}/complete",
+                    json={"completed_at": "2026-06-20T08:00:00Z"}, headers=AUTH)
+    assert r.status_code == 200
+    assert r.json()["completed_at"] == "2026-06-20T08:00:00Z"
+
+
+def test_complete_rejects_note_over_2000_chars(client):
+    tid = client.post("/tasks", json={"title": "Long note", "category": "chore"},
+                      headers=AUTH).json()["id"]
+    r = client.post(f"/tasks/{tid}/complete",
+                    json={"note": "x" * 2001}, headers=AUTH)
+    assert r.status_code == 400
+    assert "note" in r.json()["error"]
+
+
+def test_complete_trims_whitespace_padded_note(client):
+    tid = client.post("/tasks", json={"title": "Padded note", "category": "chore"},
+                      headers=AUTH).json()["id"]
+    r = client.post(f"/tasks/{tid}/complete",
+                    json={"note": "   trimmed please   "}, headers=AUTH)
+    assert r.status_code == 200
+    e = next(e for e in client.get("/feed", headers=AUTH).json()["events"]
+             if e["task"] == "Padded note")
+    assert e["note"] == "trimmed please"

@@ -167,6 +167,9 @@ class AgentJobs:
         job = self.get(job_id)
         if job is None or job["status"] != "queued":
             return                       # e.g. marked interrupted meanwhile
+        # pre-bind so the except blocks below stay safe even when _runner_env()
+        # or log_path() is what raised (unbound locals would NameError there)
+        clone, timeout, log_file = None, None, None
         try:
             clone, cmd, timeout = self._runner_env()
             self._update(job_id, status="running", started_at=_now_iso())
@@ -219,6 +222,8 @@ class AgentJobs:
 
     @staticmethod
     def _tail(log_file):
+        if not log_file:                 # job failed before the log existed
+            return None
         try:
             with open(log_file, encoding="utf-8", errors="replace") as f:
                 return f.read()[-LOG_TAIL_CHARS:]

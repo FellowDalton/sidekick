@@ -154,6 +154,36 @@ def test_execute_failure_resets_clone_and_records_tail(vault_repo, bare_remote, 
     assert not (verify / "stray.md").exists()
 
 
+def test_execute_failed_push_resets_to_pre_job_baseline(vault_repo, agent_clone, agent_env,
+                                                        monkeypatch):
+    """If commit_and_push commits successfully but the push itself then fails, the
+    commit must not survive the reset — otherwise it publishes silently alongside
+    whatever the NEXT job commits (the clone would already be past the baseline
+    when that job's failure path resets it)."""
+    baseline = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(agent_clone),
+                              capture_output=True, text=True, check=True).stdout.strip()
+
+    def fake_commit_and_push(clone, message, **kwargs):
+        subprocess.run(["git", "add", "-A"], cwd=clone, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", message], cwd=clone, check=True, capture_output=True)
+        raise agent_jobs.git_sync.GitSyncError("push failed (simulated)")
+
+    monkeypatch.setattr(agent_jobs.git_sync, "commit_and_push", fake_commit_and_push)
+
+    aj = AgentJobs(str(vault_repo), start_worker=False)
+    job = _enqueue(aj)
+    aj._execute(job["id"])
+
+    failed = aj.get(job["id"])
+    assert failed["status"] == "failed"
+    after = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(agent_clone),
+                           capture_output=True, text=True, check=True).stdout.strip()
+    assert after == baseline                    # the failed job's commit is gone
+    out = subprocess.run(["git", "status", "--porcelain"], cwd=str(agent_clone),
+                         capture_output=True, text=True)
+    assert out.stdout.strip() == ""
+
+
 def test_execute_timeout_fails_the_job(vault_repo, agent_clone, make_script, monkeypatch):
     slow = make_script("slow-pi", "sleep 5\n")
     monkeypatch.setenv("SIDEKICK_AGENT_CLONE", str(agent_clone))

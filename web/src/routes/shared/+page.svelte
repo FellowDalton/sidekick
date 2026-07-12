@@ -66,8 +66,10 @@
     return j.status === "queued" || j.status === "running";
   }
   function chipText(j: AgentJob): string {
-    if (j.status === "done") return j.summary ? `done — ${j.summary}` : "done";
-    if (j.status === "failed") return "failed";
+    // breakdown sub-tasks land via the host's sync timer, a few minutes after
+    // the job itself finishes — don't imply they're already on the list
+    if (j.status === "done") return "done — sub-tasks arrive in a few minutes";
+    if (j.status === "failed") return j.error === "job lost" ? "failed (job lost)" : "failed";
     return j.status;
   }
   function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }

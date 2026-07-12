@@ -169,7 +169,7 @@ class AgentJobs:
             return                       # e.g. marked interrupted meanwhile
         # pre-bind so the except blocks below stay safe even when _runner_env()
         # or log_path() is what raised (unbound locals would NameError there)
-        clone, timeout, log_file = None, None, None
+        clone, timeout, log_file, baseline = None, None, None, None
         try:
             clone, cmd, timeout = self._runner_env()
             self._update(job_id, status="running", started_at=_now_iso())
@@ -177,7 +177,11 @@ class AgentJobs:
             os.makedirs(os.path.dirname(log_file), exist_ok=True)
             if not clone or not os.path.isdir(os.path.join(clone, ".git")):
                 raise RuntimeError(f"agent clone not available: {clone!r}")
+            # a crash mid-job (process killed, etc.) can leave the clone dirty;
+            # reset it before touching it so that never fails the NEXT job's rebase
+            self._reset_clone(clone)
             git_sync.pull_latest(clone)                # fresh state before every job
+            baseline = self._head_sha(clone)            # roll back here if this job fails after committing
             if job["action"] == "research":
                 prompt = agent_prompts.research_prompt(
                     job["task_id"], job["title"], job["category"])
@@ -211,12 +215,12 @@ class AgentJobs:
                          summary=self._summary(log_file),
                          log_tail=self._tail(log_file))
         except subprocess.TimeoutExpired:
-            self._reset_clone(clone)
+            self._reset_clone(clone, baseline)
             self._update(job_id, status="failed", finished_at=_now_iso(),
                          error=f"agent command timed out after {timeout:g}s",
                          log_tail=self._tail(log_file))
         except Exception as e:
-            self._reset_clone(clone)
+            self._reset_clone(clone, baseline)
             self._update(job_id, status="failed", finished_at=_now_iso(),
                          error=str(e)[:500], log_tail=self._tail(log_file))
 
@@ -241,10 +245,26 @@ class AgentJobs:
         return lines[-1][:SUMMARY_CHARS] if lines else None
 
     @staticmethod
-    def _reset_clone(clone):
-        """Spec: reset --hard && clean -fd on failure. Best-effort — never raise
-        from cleanup (the job is already failed)."""
+    def _head_sha(clone):
+        """HEAD sha right after pull_latest — the baseline _reset_clone rolls back
+        to if this job fails after committing but before (or during) its push, so
+        a failed job's commit never silently rides along with the next job."""
+        try:
+            out = subprocess.run(["git", "rev-parse", "HEAD"], cwd=clone,
+                                 capture_output=True, text=True, check=True)
+            return out.stdout.strip()
+        except (subprocess.CalledProcessError, OSError):
+            return None
+
+    @staticmethod
+    def _reset_clone(clone, baseline=None):
+        """Spec: reset --hard && clean -fd on failure. With a baseline sha, reset
+        to that commit instead of current HEAD — otherwise a commit this job made
+        (whose push then failed) would survive the reset and publish silently
+        alongside the next job. Best-effort — never raise from cleanup (the job
+        is already failed, or this is just the pre-job dirty-clone guard)."""
         if not clone or not os.path.isdir(clone):
             return
-        for args in (["reset", "--hard"], ["clean", "-fd"]):
+        reset_args = ["reset", "--hard", baseline] if baseline else ["reset", "--hard"]
+        for args in (reset_args, ["clean", "-fd"]):
             subprocess.run(["git", *args], cwd=clone, capture_output=True, text=True)

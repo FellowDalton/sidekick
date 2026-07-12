@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
 import type { Feed } from "$lib/types";
 
@@ -19,7 +19,7 @@ vi.mock("$lib/api", () => ({
 }));
 
 import SharedPage from "./+page.svelte";
-import { getFeed, createTask, completeTask, startAgentJob } from "$lib/api";
+import { getFeed, createTask, completeTask, startAgentJob, getAgentJob, ApiError } from "$lib/api";
 
 const feed: Feed = {
   events: [],
@@ -29,6 +29,8 @@ const feed: Feed = {
     { id: "new", task: "New shared", category: "chore", sat_for_hours: 5, plan: null, from: "wife", shared: true }
   ]
 };
+
+afterEach(() => vi.useRealTimers());
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -108,5 +110,52 @@ describe("Shared list", () => {
     await fireEvent.click(screen.getByRole("button", { name: /break down new shared/i }));
     await waitFor(() => expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown"));
     expect(screen.getByText("queued")).toBeInTheDocument();
+  });
+
+  it("shows a done chip that doesn't overpromise immediate sub-tasks", async () => {
+    vi.mocked(startAgentJob).mockResolvedValue({
+      id: "j1", task_id: "new", action: "breakdown", status: "queued",
+      summary: null, error: null, log_tail: null,
+      created_at: "T", started_at: null, finished_at: null
+    } as any);
+    vi.mocked(getAgentJob).mockResolvedValue({
+      id: "j1", task_id: "new", action: "breakdown", status: "done",
+      summary: "3 sub-tasks created", error: null, log_tail: null,
+      created_at: "T", started_at: "T", finished_at: "T"
+    } as any);
+
+    render(SharedPage);
+    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
+
+    vi.useFakeTimers();
+    await fireEvent.click(screen.getByRole("button", { name: /break down new shared/i }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown");
+
+    await vi.advanceTimersByTimeAsync(5000);   // poll 1 → done
+    vi.useRealTimers();
+    await waitFor(() =>
+      expect(screen.getByText("done — sub-tasks arrive in a few minutes")).toBeInTheDocument());
+  });
+
+  it("shows a job-lost chip as failed (job lost)", async () => {
+    vi.mocked(startAgentJob).mockResolvedValue({
+      id: "j1", task_id: "new", action: "breakdown", status: "queued",
+      summary: null, error: null, log_tail: null,
+      created_at: "T", started_at: null, finished_at: null
+    } as any);
+    vi.mocked(getAgentJob).mockRejectedValue(new ApiError(404, "not found"));
+
+    render(SharedPage);
+    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
+
+    vi.useFakeTimers();
+    await fireEvent.click(screen.getByRole("button", { name: /break down new shared/i }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown");
+
+    await vi.advanceTimersByTimeAsync(5000);   // poll 1 → 404, marked job lost
+    vi.useRealTimers();
+    await waitFor(() => expect(screen.getByText("failed (job lost)")).toBeInTheDocument());
   });
 });

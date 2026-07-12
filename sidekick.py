@@ -12,7 +12,8 @@ Commands (Claude Code runs these):
     python sidekick.py regenerate                 # the assembler — rebuild the feed
     python sidekick.py new "Call the dentist" --category phone
     python sidekick.py set-plan <id> --file plan.json     # or pipe JSON on stdin
-    python sidekick.py complete <id>              # -> appends to ledger, marks done
+    python sidekick.py complete <id> [--note "<what worked>"] [--via cli|phone|agent]
+                                                  # -> appends to ledger, marks done
 
 Setup:
     pip install pyyaml          # the only dependency
@@ -305,6 +306,9 @@ def main():
     pn.add_argument("--shared", action="store_true", help="put it on the shared list")
     pp = sub.add_parser("set-plan"); pp.add_argument("id"); pp.add_argument("--file", help="JSON {summary, steps}; omit to read stdin")
     pc = sub.add_parser("complete"); pc.add_argument("id")
+    pc.add_argument("--note", help="what worked / what happened — recorded in the ledger event")
+    pc.add_argument("--via", choices=["cli", "phone", "agent"], default="cli",
+                    help="which surface completed it (default: cli)")
     a = ap.parse_args()
 
     if a.cmd == "regenerate":
@@ -318,7 +322,7 @@ def main():
         plan = json.loads(raw)
         set_plan(a.id, plan["summary"], plan["steps"]); regenerate()
     elif a.cmd == "complete":
-        complete(a.id); regenerate()
+        complete(a.id, note=a.note, via=a.via); regenerate()
 
 if __name__ == "__main__":
     main()

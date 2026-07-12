@@ -11,6 +11,7 @@ the nudge job's pruning may run in different processes."""
 import json
 import os
 
+import requests
 from pywebpush import webpush, WebPushException
 
 from server.vault_lock import vault_lock
@@ -78,10 +79,13 @@ def send_to_identity(config, name, title, body):
                     vapid_private_key=priv,
                     vapid_claims={"sub": claims_sub})  # fresh dict: pywebpush mutates it
             delivered += 1
-        except WebPushException as e:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-            if status in (404, 410):
-                gone.append(sub.get("endpoint"))
+        except (WebPushException, requests.exceptions.RequestException) as e:
+            # WebPushException: check if the endpoint is gone (404/410)
+            if isinstance(e, WebPushException):
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                if status in (404, 410):
+                    gone.append(sub.get("endpoint"))
+            # RequestException (raw network error): skip this subscription, keep going (best-effort)
             # anything else: skip this subscription, keep going (best-effort)
     if gone:
         with vault_lock(config.vault):

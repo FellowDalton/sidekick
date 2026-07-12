@@ -3,6 +3,7 @@ the store, 404/410 pruning, and identity routing are tested for real."""
 import json
 
 import pytest
+import requests
 from pywebpush import WebPushException
 
 from server import push
@@ -94,6 +95,22 @@ def test_send_keeps_subscription_on_transient_failure(vault_repo, vapid_env, mon
     monkeypatch.setattr(push, "webpush", fake)
     assert push.send_to_identity(_config(vault_repo), "dalton", "T", "B") == 0
     assert _store(vault_repo)["dalton"] == [SUB_A]        # 500 is not "gone" — keep it
+
+
+def test_send_survives_raw_network_error(vault_repo, vapid_env, monkeypatch):
+    push.save_subscription(str(vault_repo), "dalton", SUB_A)
+    push.save_subscription(str(vault_repo), "dalton", SUB_B)
+
+    def fake(subscription_info, **kw):
+        if subscription_info["endpoint"] == SUB_A["endpoint"]:
+            raise requests.exceptions.Timeout("network timeout")
+        # SUB_B succeeds
+        return None
+
+    monkeypatch.setattr(push, "webpush", fake)
+    assert push.send_to_identity(_config(vault_repo), "dalton", "T", "B") == 1
+    # Both subscriptions remain (network error is not "gone")
+    assert _store(vault_repo)["dalton"] == [SUB_A, SUB_B]
 
 
 def test_send_unconfigured_raises(vault_repo, monkeypatch):

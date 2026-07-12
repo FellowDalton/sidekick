@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getFeed, getMe, createTask, completeTask, getVapidPublicKey, subscribePush, ApiError } from "./api";
+import { getFeed, getMe, createTask, completeTask, getVapidPublicKey, subscribePush, startAgentJob, getAgentJob, ApiError } from "./api";
 import { settings } from "./settings";
 
 function mockFetch(status: number, body: unknown) {
@@ -123,5 +123,41 @@ describe("push api", () => {
   it("surfaces 503 when push is not configured on the host", async () => {
     vi.stubGlobal("fetch", mockFetch(503, { error: "web push not configured" }));
     await expect(getVapidPublicKey()).rejects.toMatchObject({ status: 503 });
+  });
+});
+
+describe("agent api", () => {
+  const job = {
+    id: "j1", task_id: "t1", action: "research", status: "queued",
+    summary: null, error: null, log_tail: null,
+    created_at: "T", started_at: null, finished_at: null
+  };
+
+  it("POSTs the action to /agent with an Idempotency-Key", async () => {
+    const f = mockFetch(202, job);
+    vi.stubGlobal("fetch", f);
+    const res = await startAgentJob("t1", "research");
+    expect(res.status).toBe("queued");
+    const [url, opts] = f.mock.calls[0];
+    expect(url).toBe("/api/tasks/t1/agent");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body)).toEqual({ action: "research" });
+    expect(typeof opts.headers["Idempotency-Key"]).toBe("string");
+    expect(opts.headers["Idempotency-Key"].length).toBeGreaterThan(0);
+  });
+
+  it("GETs a job by id with the bearer token", async () => {
+    const f = mockFetch(200, { ...job, status: "done", summary: "plan set" });
+    vi.stubGlobal("fetch", f);
+    const res = await getAgentJob("j1");
+    expect(res.summary).toBe("plan set");
+    const [url, opts] = f.mock.calls[0];
+    expect(url).toBe("/api/agent/jobs/j1");
+    expect(opts.headers["Authorization"]).toBe("Bearer t0ken");
+  });
+
+  it("surfaces 403 when the role may not run the action", async () => {
+    vi.stubGlobal("fetch", mockFetch(403, { error: "forbidden" }));
+    await expect(startAgentJob("t1", "research")).rejects.toMatchObject({ status: 403 });
   });
 });

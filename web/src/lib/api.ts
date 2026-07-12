@@ -65,3 +65,31 @@ export async function subscribePush(sub: PushSubscriptionJSON): Promise<void> {
     body: JSON.stringify(sub)
   }));
 }
+
+export type AgentAction = "research" | "breakdown";
+export type AgentJobStatus = "queued" | "running" | "done" | "failed";
+
+export interface AgentJob {
+  id: string;
+  task_id: string;
+  action: AgentAction;
+  status: AgentJobStatus;
+  summary: string | null;
+  error: string | null;
+  log_tail: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export async function startAgentJob(taskId: string, action: AgentAction): Promise<AgentJob> {
+  return handle(await fetch(`${base()}/api/tasks/${encodeURIComponent(taskId)}/agent`, {
+    method: "POST",
+    headers: headers({ "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }),
+    body: JSON.stringify({ action })
+  }));
+}
+
+export async function getAgentJob(id: string): Promise<AgentJob> {
+  return handle(await fetch(`${base()}/api/agent/jobs/${encodeURIComponent(id)}`, { headers: headers() }));
+}

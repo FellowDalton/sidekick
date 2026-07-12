@@ -24,6 +24,9 @@ export default defineConfig({
         ]
       },
       workbox: {
+        // static/push-sw.js carries the push + notificationclick handlers; importScripts
+        // keeps us in generateSW mode (precache + NetworkFirst config stay generated).
+        importScripts: ["push-sw.js"],
         globPatterns: ["**/*.{js,css,html,png,svg,woff2}"],
         runtimeCaching: [
           {

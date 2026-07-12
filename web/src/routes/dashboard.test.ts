@@ -40,4 +40,12 @@ describe("Dashboard", () => {
     render(Dashboard, { props: { feed: evil as any } });
     expect(screen.getByText("click me").closest("a")).toBeNull(); // plain text, not an anchor
   });
+
+  it("renders the patterns panel computed from events", () => {
+    const { container } = render(Dashboard, { props: { feed } });
+    expect(screen.getByText("Patterns")).toBeInTheDocument();
+    const panel = container.querySelector(".patterns");
+    expect(panel?.textContent).toContain("phone 1");
+    expect(panel?.textContent).toContain("consecutive days");
+  });
 });

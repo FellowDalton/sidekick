@@ -272,8 +272,10 @@ def create_app(config=None, agent_jobs=None):
     def get_agent_job(job_id: str, authorization: str = Header(default="")):
         ident = require_auth(authorization)
         job = app.state.agent_jobs.get(job_id)
-        if job is None or (ident["role"] == "shared" and not job.get("shared")):
-            # a personal job must be indistinguishable from a missing one
+        if (job is None or
+                (ident["role"] == "shared" and
+                 (not job.get("shared") or job.get("action") != "breakdown"))):
+            # a personal or research job must be indistinguishable from a missing one
             raise HTTPException(status_code=404, detail=f"no such job: {job_id}")
         return job
 

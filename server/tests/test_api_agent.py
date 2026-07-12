@@ -189,6 +189,49 @@ def test_jobs_endpoints_require_auth(agent_api):
     assert agent_api.get("/agent/jobs/x").status_code == 401
 
 
+def test_full_role_research_on_shared_task_hidden_from_shared_role(agent_api):
+    """Full role runs research on a shared task → job created with shared=True;
+    shared role must NOT see it (research transcripts are private)."""
+    ts = _new(agent_api, SHARED, title="Buy milk", category="chore")  # shared task
+    # Full role runs research on this shared task
+    research_job = agent_api.post(f"/tasks/{ts}/agent", json={"action": "research"},
+                                  headers=FULL).json()
+    jid = research_job["id"]
+    assert research_job["shared"] is True
+    assert research_job["action"] == "research"
+
+    # Shared role's GET list should NOT include this job
+    jobs = agent_api.get("/agent/jobs", headers=SHARED).json()["jobs"]
+    assert [j["id"] for j in jobs] == []  # empty — research job is hidden
+
+    # Shared role's GET by id should get 404 with same message as unknown id
+    r_research = agent_api.get(f"/agent/jobs/{jid}", headers=SHARED)
+    r_unknown = agent_api.get("/agent/jobs/nope", headers=SHARED)
+    assert r_research.status_code == r_unknown.status_code == 404
+    assert r_research.json() == {"error": f"no such job: {jid}"}
+    assert r_unknown.json() == {"error": "no such job: nope"}
+
+
+def test_shared_role_breakdown_on_shared_task_visible(agent_api):
+    """Shared role's own breakdown job on a shared task remains visible."""
+    ts = _new(agent_api, SHARED, title="Buy milk", category="chore")  # shared task
+    # Shared role runs breakdown on this shared task
+    breakdown_job = agent_api.post(f"/tasks/{ts}/agent", json={"action": "breakdown"},
+                                   headers=SHARED).json()
+    jid = breakdown_job["id"]
+    assert breakdown_job["shared"] is True
+    assert breakdown_job["action"] == "breakdown"
+
+    # Shared role's GET list SHOULD include this job
+    jobs = agent_api.get("/agent/jobs", headers=SHARED).json()["jobs"]
+    assert [j["id"] for j in jobs] == [jid]
+
+    # Shared role's GET by id SHOULD work
+    r = agent_api.get(f"/agent/jobs/{jid}", headers=SHARED)
+    assert r.status_code == 200
+    assert r.json()["id"] == jid
+
+
 def test_agent_job_end_to_end(vault_repo, bare_remote, tmp_path, agent_env):
     """The full path over HTTP with a STARTED worker and a fake command:
     POST → queue → runner (pull, run, push) → GET shows done + summary.

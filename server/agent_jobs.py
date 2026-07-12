@@ -129,12 +129,12 @@ class AgentJobs:
         return None
 
     def list_jobs(self, shared_only=False):
-        """Newest first, capped. shared_only => only jobs on shared tasks —
-        what role `shared` may see (spec sub-projects 2+3)."""
+        """Newest first, capped. shared_only => only breakdown jobs on shared tasks
+        (research transcripts stay private) — what role `shared` may see (spec sub-projects 2+3)."""
         with self._lock:
             jobs = load_jobs(self.vault)
         if shared_only:
-            jobs = [j for j in jobs if j.get("shared")]
+            jobs = [j for j in jobs if j.get("shared") and j.get("action") == "breakdown"]
         return [dict(j) for j in reversed(jobs[-LIST_CAP:])]
 
     def _update(self, job_id, **fields):

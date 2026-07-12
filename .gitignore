@@ -8,6 +8,10 @@ nudge.log
 # web-push subscription store (runtime state, per-vault; never in git)
 .sidekick-push.json
 
+# agent runner job store + per-job logs (runtime state, per-vault; never in git)
+.sidekick-agent-jobs.json
+.sidekick-agent-logs/
+
 # generated copies mirrored into the extension by `sidekick.py regenerate`
 chrome-extension/sidekick-data.js
 chrome-extension/sidekick-render.js

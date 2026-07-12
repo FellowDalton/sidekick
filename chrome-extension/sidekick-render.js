@@ -112,8 +112,9 @@ function render(){
 
   // patterns — deterministic aggregates computed by `sidekick.py regenerate`.
   // Older feeds have no stats key: hide the section instead of rendering zeros.
-  const phost = document.getElementById("patterns");
-  if (STATS){
+  // Pages without a patterns host (e.g. older chrome-extension mirrors) are guarded too.
+  const phost = document.getElementById("patterns"), phead = document.getElementById("patternsHead");
+  if (STATS && phost){
     const cats = Object.entries(STATS.by_category||{}).sort((a,b)=>b[1]-a[1] || (a[0]<b[0]?-1:1));
     const wk = STATS.by_weekday || [0,0,0,0,0,0,0];
     const wkMax = Math.max(1, ...wk);
@@ -128,8 +129,8 @@ function render(){
         <div class="wkl">${WD.map(n=>`<span>${n}</span>`).join("")}</div>
         <div class="ssub">busiest: ${busiest} · UTC days</div></div>`;
   } else {
-    phost.style.display = "none";
-    document.getElementById("patternsHead").style.display = "none";
+    if (phost) phost.style.display = "none";
+    if (phead) phead.style.display = "none";
   }
 
   // recently cleared — newest first, top 7

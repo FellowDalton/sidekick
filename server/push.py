@@ -77,7 +77,8 @@ def send_to_identity(config, name, title, body):
         try:
             webpush(subscription_info=sub, data=payload,
                     vapid_private_key=priv,
-                    vapid_claims={"sub": claims_sub})  # fresh dict: pywebpush mutates it
+                    vapid_claims={"sub": claims_sub},  # fresh dict: pywebpush mutates it
+                    timeout=10, ttl=4 * 3600)
             delivered += 1
         except (WebPushException, requests.exceptions.RequestException) as e:
             # WebPushException: check if the endpoint is gone (404/410)

@@ -62,6 +62,15 @@ def test_send_delivers_to_named_identity_only(vault_repo, vapid_env, monkeypatch
     assert sent[0]["vapid_claims"] == {"sub": "mailto:test@sidekick.local"}
 
 
+def test_send_passes_timeout_and_ttl(vault_repo, vapid_env, monkeypatch):
+    push.save_subscription(str(vault_repo), "dalton", SUB_A)
+    sent = []
+    monkeypatch.setattr(push, "webpush", lambda **kw: sent.append(kw))
+    assert push.send_to_identity(_config(vault_repo), "dalton", "T", "B") == 1
+    assert sent[0]["timeout"] == 10
+    assert sent[0]["ttl"] == 14400
+
+
 def test_send_without_subscriptions_returns_zero(vault_repo, vapid_env, monkeypatch):
     monkeypatch.setattr(push, "webpush",
                         lambda **kw: pytest.fail("nothing to send to"))

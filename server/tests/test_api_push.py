@@ -94,3 +94,41 @@ def test_subscribe_rejects_oversized_auth(client, vault_repo):
     if push_file.exists():
         data = json.loads(push_file.read_text(encoding="utf-8"))
         assert "dalton" not in data or data["dalton"] == []
+
+
+def test_subscribe_rejects_non_string_p256dh(client, vault_repo):
+    bad = SUB.copy()
+    bad["keys"] = SUB["keys"].copy()
+    bad["keys"]["p256dh"] = 12345
+    r = client.post("/push/subscribe", headers=AUTH, json=bad)
+    assert r.status_code == 400
+    assert r.json() == {"error": "a PushSubscription JSON (endpoint + keys) is required"}
+    push_file = vault_repo / ".sidekick-push.json"
+    if push_file.exists():
+        data = json.loads(push_file.read_text(encoding="utf-8"))
+        assert "dalton" not in data or data["dalton"] == []
+
+
+def test_subscribe_rejects_non_string_auth(client, vault_repo):
+    bad = SUB.copy()
+    bad["keys"] = SUB["keys"].copy()
+    bad["keys"]["auth"] = True
+    r = client.post("/push/subscribe", headers=AUTH, json=bad)
+    assert r.status_code == 400
+    assert r.json() == {"error": "a PushSubscription JSON (endpoint + keys) is required"}
+    push_file = vault_repo / ".sidekick-push.json"
+    if push_file.exists():
+        data = json.loads(push_file.read_text(encoding="utf-8"))
+        assert "dalton" not in data or data["dalton"] == []
+
+
+def test_subscribe_rejects_non_https_endpoint(client, vault_repo):
+    bad = SUB.copy()
+    bad["endpoint"] = "http://push.example/x"
+    r = client.post("/push/subscribe", headers=AUTH, json=bad)
+    assert r.status_code == 400
+    assert r.json() == {"error": "a PushSubscription JSON (endpoint + keys) is required"}
+    push_file = vault_repo / ".sidekick-push.json"
+    if push_file.exists():
+        data = json.loads(push_file.read_text(encoding="utf-8"))
+        assert "dalton" not in data or data["dalton"] == []

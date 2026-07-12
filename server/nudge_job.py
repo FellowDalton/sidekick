@@ -52,9 +52,9 @@ def deterministic_message(t):
         href = s0.get("href", "")
         if href.startswith("http"):
             extra = f" {href}"
-        return (f'"{t["task"]}" has sat {_sat_str(t.get("sat_for_hours"))}. '
+        return (f'“{t["task"]}” has sat {_sat_str(t.get("sat_for_hours"))}. '
                 f'First step\'s ready: {s0.get("text", "")}.{extra}')
-    return (f'"{t["task"]}" has sat {_sat_str(t.get("sat_for_hours"))}. '
+    return (f'“{t["task"]}” has sat {_sat_str(t.get("sat_for_hours"))}. '
             "Open Claude Code and ask for a first step?")
 
 

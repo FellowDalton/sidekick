@@ -1,0 +1,13 @@
+[Unit]
+Description=Run the sidekick nudge daily at 09:00 Copenhagen time
+
+[Timer]
+# The timezone is explicit IN the OnCalendar spec (systemd >= 235; Ubuntu 24.04
+# ships 255), so this fires at 09:00 Europe/Copenhagen regardless of the VPS's
+# system timezone (UTC) and stays correct across DST transitions.
+OnCalendar=*-*-* 09:00:00 Europe/Copenhagen
+# Box asleep/rebooting at 09:00? Fire on next boot instead of skipping the day.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

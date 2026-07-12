@@ -169,6 +169,59 @@ Verify:
 A conflicting pull exits 1 with the vault left clean (rebase aborted); check
 `journalctl -u sidekick-sync.service` if the phones stop seeing Mac-side changes.
 
+## Web-push nudges (daily, 09:00 Copenhagen)
+
+The VPS sends the daily nudge as a web-push notification (`server/nudge_job.py`).
+One-time setup on the VPS:
+
+    # 1. deps into the venv (pywebpush is in server/requirements.txt)
+    sudo -u sidekick /srv/sidekick/.venv/bin/pip install -r /srv/sidekick/server/requirements.txt
+
+    # 2. generate the VAPID keypair — prints two env lines, paste them into /etc/sidekick.env
+    sudo -u sidekick /srv/sidekick/.venv/bin/python - <<'EOF'
+    import base64
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    key = ec.generate_private_key(ec.SECP256R1())
+    b64 = lambda b: base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+    print("SIDEKICK_VAPID_PRIVATE=" + b64(key.private_numbers().private_value.to_bytes(32, "big")))
+    print("SIDEKICK_VAPID_PUBLIC=" + b64(key.public_key().public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)))
+    EOF
+
+Add to `/etc/sidekick.env` (one line each, values unquoted):
+
+    SIDEKICK_VAPID_PRIVATE=...          # from the generator above
+    SIDEKICK_VAPID_PUBLIC=...           # from the generator above
+    SIDEKICK_VAPID_SUB=mailto:nikoflash@gmail.com
+    SIDEKICK_NUDGE_MIN_SAT_HOURS=48     # optional; this is the default
+    # SIDEKICK_NUDGE_CMD=pi -p          # optional model wording — leave unset until
+    #                                     pi lands on the box (agent-runner sub-project);
+    #                                     unset = deterministic wording, always works
+
+Then install and verify:
+
+    sudo systemctl restart sidekick     # the API serves the public key from the env
+    sudo cp deploy/sidekick-nudge.service deploy/sidekick-nudge.timer /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now sidekick-nudge.timer
+
+    systemctl list-timers sidekick-nudge.timer   # next run: 09:00 Europe/Copenhagen
+    sudo -u sidekick bash -c 'set -a; . /etc/sidekick.env; cd /srv/sidekick && .venv/bin/python -m server.nudge_job --dry-run'
+    sudo systemctl start sidekick-nudge.service && journalctl -u sidekick-nudge -n 3
+
+Phone (Dalton's iPhone; the shared-role token gets no push this phase):
+
+1. Open the **installed** (Home-Screen) Sidekick app — iOS only allows web push there,
+   never in a plain Safari tab.
+2. Settings → **Enable notifications** → Allow when iOS asks.
+3. With a stalled task present, `sudo systemctl start sidekick-nudge.service` → the
+   banner arrives on the phone.
+
+Subscriptions live in `/srv/sidekick/.sidekick-push.json` (gitignored). The sync job
+uses the same channel: three consecutive `git pull` failures send one alert.
+The old Mac path (`nudge.py` + launchd + Beeper) remains the documented offline fallback.
+
 ---
 
 ## Operating notes

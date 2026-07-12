@@ -1,0 +1,19 @@
+[Unit]
+Description=Sidekick daily nudge (web push)
+Documentation=https://github.com/FellowDalton/sidekick/blob/main/deploy/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=sidekick
+Group=sidekick
+WorkingDirectory=/srv/sidekick
+EnvironmentFile=/etc/sidekick.env
+ExecStart=/srv/sidekick/.venv/bin/python -m server.nudge_job
+# A hung model-wording call must not linger (the job caps wording at 60s anyway).
+TimeoutStartSec=180
+# Same hardening posture as sidekick.service: only its own clone.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true

@@ -133,11 +133,16 @@ def set_plan(task_id, summary, steps):
     write_note(task_path(task_id), fm, body)
     print(f"plan set on {task_id}")
 
-def complete(task_id, completed_at=None):
+def complete(task_id, completed_at=None, note=None, via=None):
     """Append the completion event to the ledger (its only writer), then mark the
     task done. Idempotent: an already-done task is NOT re-appended. `completed_at` (ISO
     string) lets a caller (e.g. the phone) stamp the moment of completion; defaults to
-    now. Returns a result dict. Raises FileNotFoundError if the task file is absent."""
+    now. `note` (what worked / what happened) and `via` (cli|phone|agent) are optional
+    learning-layer fields; `from` is copied from task frontmatter when present (who
+    captured the task — written by the shared-list layer). All three are OMITTED when
+    absent, never null — old and new ledger lines stay shape-compatible, and readers
+    must tolerate missing fields. Returns a result dict. Raises FileNotFoundError if
+    the task file is absent."""
     fm, body = read_note(task_path(task_id))
     title = next((l[2:].strip() for l in body.splitlines() if l.startswith("# ")), task_id)
     if fm.get("status") == "done":
@@ -153,6 +158,12 @@ def complete(task_id, completed_at=None):
         "sat_for_hours": hours_since(fm.get("created")),
         "orchestrator": (plan or {}).get("summary"),   # what the orchestrator did to help (§6)
     }
+    if note:
+        event["note"] = note
+    if via:
+        event["via"] = via
+    if fm.get("from"):
+        event["from"] = fm["from"]
     with open(LEDGER, "a", encoding="utf-8") as f:       # append-only, code-only
         f.write(json.dumps(event, ensure_ascii=False) + "\n")
     fm["status"] = "done"

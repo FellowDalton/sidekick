@@ -89,6 +89,13 @@ def create_app(config=None):
                 or not keys.get("p256dh") or not keys.get("auth")):
             raise HTTPException(status_code=400,
                                 detail="a PushSubscription JSON (endpoint + keys) is required")
+        # size-cap subscription fields to prevent unbounded growth
+        if len(endpoint) > 2048:
+            raise HTTPException(status_code=400, detail="subscription field too large")
+        if len(keys.get("p256dh", "")) > 256:
+            raise HTTPException(status_code=400, detail="subscription field too large")
+        if len(keys.get("auth", "")) > 64:
+            raise HTTPException(status_code=400, detail="subscription field too large")
         sub = {"endpoint": endpoint,
                "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}}
         count = push.save_subscription(config.vault, ident["name"], sub)

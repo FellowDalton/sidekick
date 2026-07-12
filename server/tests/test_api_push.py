@@ -53,3 +53,44 @@ def test_vapid_public_key_unconfigured_is_503(client, monkeypatch):
 
 def test_vapid_public_key_requires_auth(client):
     assert client.get("/push/vapid-public-key").status_code == 401
+
+
+def test_subscribe_rejects_oversized_endpoint(client, vault_repo):
+    oversized = SUB.copy()
+    oversized["endpoint"] = "https://push.example/" + "x" * 5000
+    r = client.post("/push/subscribe", headers=AUTH, json=oversized)
+    assert r.status_code == 400
+    assert r.json() == {"error": "subscription field too large"}
+    # verify nothing was stored
+    push_file = vault_repo / ".sidekick-push.json"
+    if push_file.exists():
+        data = json.loads(push_file.read_text(encoding="utf-8"))
+        assert "dalton" not in data or data["dalton"] == []
+
+
+def test_subscribe_rejects_oversized_p256dh(client, vault_repo):
+    oversized = SUB.copy()
+    oversized["keys"] = SUB["keys"].copy()
+    oversized["keys"]["p256dh"] = "pk" * 200  # exceeds 256 char limit
+    r = client.post("/push/subscribe", headers=AUTH, json=oversized)
+    assert r.status_code == 400
+    assert r.json() == {"error": "subscription field too large"}
+    # verify nothing was stored
+    push_file = vault_repo / ".sidekick-push.json"
+    if push_file.exists():
+        data = json.loads(push_file.read_text(encoding="utf-8"))
+        assert "dalton" not in data or data["dalton"] == []
+
+
+def test_subscribe_rejects_oversized_auth(client, vault_repo):
+    oversized = SUB.copy()
+    oversized["keys"] = SUB["keys"].copy()
+    oversized["keys"]["auth"] = "au" * 50  # exceeds 64 char limit
+    r = client.post("/push/subscribe", headers=AUTH, json=oversized)
+    assert r.status_code == 400
+    assert r.json() == {"error": "subscription field too large"}
+    # verify nothing was stored
+    push_file = vault_repo / ".sidekick-push.json"
+    if push_file.exists():
+        data = json.loads(push_file.read_text(encoding="utf-8"))
+        assert "dalton" not in data or data["dalton"] == []

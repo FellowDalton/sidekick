@@ -62,4 +62,36 @@ def client(app_config):
     return TestClient(create_app(app_config))
 
 
+@pytest.fixture
+def agent_clone(bare_remote, tmp_path) -> Path:
+    """The agent's SEPARATE vault clone (spec sub-project 3) — never the serving clone."""
+    return clone(bare_remote, tmp_path / "agent-clone")
+
+
+@pytest.fixture
+def make_script(tmp_path):
+    """Write an executable shell script; its path substitutes for `pi` in tests.
+    Tests NEVER invoke real pi or the network."""
+    def _make(name, body):
+        path = tmp_path / name
+        path.write_text("#!/bin/sh\n" + body, encoding="utf-8")
+        path.chmod(0o755)
+        return str(path)
+    return _make
+
+
+@pytest.fixture
+def agent_env(agent_clone, make_script, monkeypatch):
+    """Runner env pointing at the throwaway clone + a fake success command that
+    proves cwd (writes into the clone), prompt delivery ($1) and the push path."""
+    ok = make_script("fake-pi",
+                     'echo "PROMPT: $1"\n'
+                     'printf "agent was here\\n" > agent-note.md\n'
+                     'echo "plan set: call the dentist first"\n')
+    monkeypatch.setenv("SIDEKICK_AGENT_CLONE", str(agent_clone))
+    monkeypatch.setenv("SIDEKICK_AGENT_CMD", ok)
+    monkeypatch.setenv("SIDEKICK_AGENT_TIMEOUT", "30")
+    return agent_clone
+
+
 AUTH = {"Authorization": "Bearer test-token"}

@@ -10,6 +10,8 @@ vi.mock("$lib/api", () => ({
   completeTask: vi.fn(async () => ({
     id: "new", status: "done", completed_at: "T", sat_for_hours: 1, already_done: false
   })),
+  startAgentJob: vi.fn(),
+  getAgentJob: vi.fn(),
   ApiError: class extends Error {
     status: number;
     constructor(status: number, msg: string) { super(msg); this.status = status; }
@@ -17,7 +19,7 @@ vi.mock("$lib/api", () => ({
 }));
 
 import SharedPage from "./+page.svelte";
-import { getFeed, createTask, completeTask } from "$lib/api";
+import { getFeed, createTask, completeTask, startAgentJob } from "$lib/api";
 
 const feed: Feed = {
   events: [],
@@ -93,5 +95,18 @@ describe("Shared list", () => {
     await waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));
     expect(screen.queryByText("New shared")).toBeNull();
     expect(screen.getByText("Wife just added this")).toBeInTheDocument();
+  });
+
+  it("break it down starts a breakdown job and shows the chip", async () => {
+    vi.mocked(startAgentJob).mockResolvedValue({
+      id: "j1", task_id: "new", action: "breakdown", status: "queued",
+      summary: null, error: null, log_tail: null,
+      created_at: "T", started_at: null, finished_at: null
+    } as any);
+    render(SharedPage);
+    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
+    await fireEvent.click(screen.getByRole("button", { name: /break down new shared/i }));
+    await waitFor(() => expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown"));
+    expect(screen.getByText("queued")).toBeInTheDocument();
   });
 });

@@ -262,4 +262,19 @@ def create_app(config=None, agent_jobs=None):
         scope = f"{ident['name']}:{request.url.path}"
         return _idem_replay_or_run(scope, idempotency_key, run)
 
+    @app.get("/agent/jobs")
+    def get_agent_jobs(authorization: str = Header(default="")):
+        ident = require_auth(authorization)
+        # role `shared` sees ONLY jobs on shared tasks; role `full` sees all
+        return {"jobs": app.state.agent_jobs.list_jobs(shared_only=(ident["role"] == "shared"))}
+
+    @app.get("/agent/jobs/{job_id}")
+    def get_agent_job(job_id: str, authorization: str = Header(default="")):
+        ident = require_auth(authorization)
+        job = app.state.agent_jobs.get(job_id)
+        if job is None or (ident["role"] == "shared" and not job.get("shared")):
+            # a personal job must be indistinguishable from a missing one
+            raise HTTPException(status_code=404, detail=f"no such job: {job_id}")
+        return job
+
     return app

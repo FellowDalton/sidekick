@@ -141,3 +141,71 @@ def test_post_agent_idempotency_replays_the_same_job(agent_api, vault_repo):
 def test_post_agent_requires_auth(agent_api):
     r = agent_api.post("/tasks/x/agent", json={"action": "research"})
     assert r.status_code == 401
+
+
+# ── job status endpoints ──────────────────────────────────────────────────────
+def test_jobs_list_newest_first(agent_api):
+    t1 = _new(agent_api, FULL, title="First")
+    t2 = _new(agent_api, FULL, title="Second")
+    id1 = agent_api.post(f"/tasks/{t1}/agent", json={"action": "research"},
+                         headers=FULL).json()["id"]
+    id2 = agent_api.post(f"/tasks/{t2}/agent", json={"action": "research"},
+                         headers=FULL).json()["id"]
+    r = agent_api.get("/agent/jobs", headers=FULL)
+    assert r.status_code == 200
+    assert [j["id"] for j in r.json()["jobs"]] == [id2, id1]
+
+
+def test_jobs_list_shared_role_sees_only_shared_jobs(agent_api):
+    tp = _new(agent_api, FULL)                                    # personal
+    ts = _new(agent_api, SHARED, title="Buy milk", category="chore")  # shared
+    agent_api.post(f"/tasks/{tp}/agent", json={"action": "research"}, headers=FULL)
+    shared_job = agent_api.post(f"/tasks/{ts}/agent", json={"action": "breakdown"},
+                                headers=FULL).json()["id"]
+    jobs = agent_api.get("/agent/jobs", headers=SHARED).json()["jobs"]
+    assert [j["id"] for j in jobs] == [shared_job]                # personal never leaks
+
+
+def test_job_get_by_id_and_unknown_404(agent_api):
+    tid = _new(agent_api, FULL)
+    jid = agent_api.post(f"/tasks/{tid}/agent", json={"action": "research"},
+                         headers=FULL).json()["id"]
+    r = agent_api.get(f"/agent/jobs/{jid}", headers=FULL)
+    assert r.status_code == 200
+    assert r.json()["task_id"] == tid
+    assert agent_api.get("/agent/jobs/nope", headers=FULL).status_code == 404
+
+
+def test_job_get_shared_role_404_on_personal_job(agent_api):
+    tid = _new(agent_api, FULL)                                   # personal
+    jid = agent_api.post(f"/tasks/{tid}/agent", json={"action": "research"},
+                         headers=FULL).json()["id"]
+    r = agent_api.get(f"/agent/jobs/{jid}", headers=SHARED)
+    assert r.status_code == 404                                   # no-leak
+
+
+def test_jobs_endpoints_require_auth(agent_api):
+    assert agent_api.get("/agent/jobs").status_code == 401
+    assert agent_api.get("/agent/jobs/x").status_code == 401
+
+
+def test_agent_job_end_to_end(vault_repo, bare_remote, tmp_path, agent_env):
+    """The full path over HTTP with a STARTED worker and a fake command:
+    POST → queue → runner (pull, run, push) → GET shows done + summary.
+    No pi, no network — agent_env substitutes a local script."""
+    cfg = Config(vault=str(vault_repo), tokens=TOKENS, push=True, remote="origin")
+    client = TestClient(create_app(cfg))              # default AgentJobs: worker ON
+    tid = _new(client, FULL)
+    job_id = client.post(f"/tasks/{tid}/agent", json={"action": "research"},
+                         headers=FULL).json()["id"]
+    deadline = time.time() + 15
+    job = None
+    while time.time() < deadline:
+        job = client.get(f"/agent/jobs/{job_id}", headers=FULL).json()
+        if job["status"] in ("done", "failed"):
+            break
+        time.sleep(0.05)
+    assert job["status"] == "done", f"job did not finish: {job}"
+    assert job["summary"] == "plan set: call the dentist first"
+    verify = clone(bare_remote, tmp_path / "verify-e2e")
+    assert (verify / "agent-note.md").exists()        # the work reached the remote

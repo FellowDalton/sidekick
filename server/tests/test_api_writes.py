@@ -91,3 +91,25 @@ def test_write_returns_409_on_git_failure(vault_repo):
                headers={"Authorization": "Bearer test-token"})
     assert r.status_code == 409
     assert "error" in r.json()
+
+
+def test_complete_stamps_via_phone_and_passes_note(client):
+    tid = client.post("/tasks", json={"title": "Book dentist", "category": "phone"},
+                      headers=AUTH).json()["id"]
+    r = client.post(f"/tasks/{tid}/complete",
+                    json={"note": "receptionist answers after 10am"}, headers=AUTH)
+    assert r.status_code == 200
+    events = client.get("/feed", headers=AUTH).json()["events"]
+    e = next(e for e in events if e["task"] == "Book dentist")
+    assert e["via"] == "phone"
+    assert e["note"] == "receptionist answers after 10am"
+
+
+def test_complete_note_is_optional_and_never_null(client):
+    tid = client.post("/tasks", json={"title": "No note", "category": "chore"},
+                      headers=AUTH).json()["id"]
+    client.post(f"/tasks/{tid}/complete", json={}, headers=AUTH)
+    e = next(e for e in client.get("/feed", headers=AUTH).json()["events"]
+             if e["task"] == "No note")
+    assert e["via"] == "phone"
+    assert "note" not in e

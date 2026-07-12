@@ -120,6 +120,9 @@ def create_app(config=None):
         except Exception:
             data = {}
         completed_at = data.get("completed_at")
+        note = data.get("note")
+        if not (isinstance(note, str) and note.strip()):
+            note = None            # never forward junk/empty into the ledger
 
         def run():
             with vault_lock(config.vault):
@@ -132,7 +135,8 @@ def create_app(config=None):
                     if not fm.get("shared"):
                         raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
                 try:
-                    result = sidekick.complete(task_id, completed_at=completed_at)
+                    result = sidekick.complete(task_id, completed_at=completed_at,
+                                               note=note, via="phone")
                 except FileNotFoundError:
                     raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
                 sidekick.regenerate()

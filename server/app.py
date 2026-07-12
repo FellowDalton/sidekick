@@ -4,7 +4,9 @@ and publishes each change to git. Mutations are serialized by an inter-process v
 (shared with the periodic sync job — see server/sync_pull.py); still run with a single
 worker (the idempotency store is per-process). Tokens map to identities (name + role);
 role `shared` sees and touches ONLY shared tasks — enforced HERE (the PWA's hiding is
-convenience, not security)."""
+convenience, not security).
+Agent jobs (spec sub-project 3) are validated and enqueued here; they execute
+in server/agent_jobs.py's single worker, in a separate vault clone."""
 import datetime as dt
 import os
 import sys
@@ -19,19 +21,24 @@ from server.config import load_config  # noqa: E402
 from server import git_sync            # noqa: E402
 from server import push                # noqa: E402
 from server.idempotency import IdempotencyStore  # noqa: E402
+from server.agent_jobs import AgentJobs  # noqa: E402
 from server.vault_lock import vault_lock  # noqa: E402
 
 VALID_CATEGORIES = {"phone", "admin", "errand", "chore"}
+VALID_AGENT_ACTIONS = {"research", "breakdown"}
 
 
-def create_app(config=None):
+def create_app(config=None, agent_jobs=None):
     config = config or load_config()
     sidekick.configure(config.vault)
     idem = IdempotencyStore(os.path.join(config.vault, ".sidekick-idempotency.json"))
+    # tests may inject a worker-off AgentJobs; production gets the real worker
+    agent_jobs = agent_jobs or AgentJobs(config.vault)
 
     app = FastAPI(title="Sidekick host API")
     app.state.config = config
     app.state.idem = idem
+    app.state.agent_jobs = agent_jobs
 
     @app.exception_handler(HTTPException)
     async def _http_exc(request: Request, exc: HTTPException):
@@ -201,6 +208,51 @@ def create_app(config=None):
                 git_sync.commit_and_push(config.vault, f"api: complete {task_id}",
                                          push=config.push, remote=config.remote)
             return 200, result
+
+        scope = f"{ident['name']}:{request.url.path}"
+        return _idem_replay_or_run(scope, idempotency_key, run)
+
+    @app.post("/tasks/{task_id}/agent")
+    async def post_agent(task_id: str, request: Request,
+                         authorization: str = Header(default=""),
+                         idempotency_key: str = Header(default="")):
+        ident = require_auth(authorization)
+        try:
+            data = _read_json(await request.json())
+        except Exception:
+            data = {}
+        action = data.get("action")
+        if action not in VALID_AGENT_ACTIONS:
+            raise HTTPException(status_code=400,
+                                detail=f"action must be one of {sorted(VALID_AGENT_ACTIONS)}")
+        if ident["role"] == "shared" and action != "breakdown":
+            # research is full-role only (spec SP2/SP3); rejected at action level
+            # — BEFORE any task lookup — so it can never leak task existence
+            raise HTTPException(status_code=403, detail="forbidden")
+        if not AgentJobs.configured():
+            raise HTTPException(status_code=503, detail="agent runner not configured")
+
+        def run():
+            with vault_lock(config.vault):
+                try:
+                    fm, body = sidekick.read_note(sidekick.task_path(task_id))
+                except FileNotFoundError:
+                    raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
+                if ident["role"] == "shared" and not fm.get("shared"):
+                    # a personal task must be indistinguishable from a missing one
+                    raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
+                if fm.get("status", "open") != "open":
+                    raise HTTPException(status_code=409, detail=f"task is not open: {task_id}")
+                title = next((l[2:].strip() for l in body.splitlines()
+                              if l.startswith("# ")), task_id)
+                shared = bool(fm.get("shared"))
+                category = fm.get("category")
+            job = app.state.agent_jobs.enqueue(task_id=task_id, action=action, title=title,
+                                     category=category, shared=shared,
+                                     requested_by=ident["name"])
+            # NOTE: an idempotent replay returns THIS enqueue-time snapshot
+            # (status "queued") — clients poll GET /agent/jobs/{id} for live state
+            return 202, job
 
         scope = f"{ident['name']}:{request.url.path}"
         return _idem_replay_or_run(scope, idempotency_key, run)

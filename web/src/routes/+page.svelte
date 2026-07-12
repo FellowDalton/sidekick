@@ -1,14 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { goto } from "$app/navigation";
   import Dashboard from "./Dashboard.svelte";
-  import { getFeed, completeTask, ApiError } from "$lib/api";
+  import { getFeed, completeTask, startAgentJob, getAgentJob, ApiError, type AgentJob } from "$lib/api";
   import { hasToken } from "$lib/settings";
   import type { Feed } from "$lib/types";
 
   let feed = $state<Feed | null>(null);
   let error = $state("");
   let pending = $state(new Set<string>());
+  let agentJobs = $state<Record<string, AgentJob>>({});
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
 
   async function load() {
     error = "";
@@ -36,17 +38,51 @@
     }
   }
 
+  // ── agent jobs (spec sub-project 3) ───────────────────────────────────────
+  function jobActive(j: AgentJob): boolean {
+    return j.status === "queued" || j.status === "running";
+  }
+  function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
+  function startPolling() { if (!pollTimer) pollTimer = setInterval(poll, 5000); }
+
+  async function poll() {
+    const active = Object.values(agentJobs).filter(jobActive);
+    if (active.length === 0) { stopPolling(); return; }
+    for (const j of active) {
+      try {
+        const fresh = await getAgentJob(j.id);
+        agentJobs = { ...agentJobs, [fresh.task_id]: fresh };
+        // the agent's plan reaches this clone via the host's sync timer —
+        // reload on done, but it may still take a couple of minutes to appear
+        if (fresh.status === "done") await load();
+      } catch { /* transient — keep polling */ }
+    }
+  }
+
+  async function onAgent(id: string) {
+    if (agentJobs[id] && jobActive(agentJobs[id])) return;
+    error = "";
+    try {
+      const job = await startAgentJob(id, "research");
+      agentJobs = { ...agentJobs, [id]: job };
+      startPolling();
+    } catch (e) {
+      error = e instanceof Error ? e.message : "couldn't start the agent — try again";
+    }
+  }
+
   onMount(() => {
     if (!hasToken()) { goto("/settings"); return; }
     load();
   });
+  onDestroy(stopPolling);
 </script>
 
 {#if error}
   <p class="msg-err">{error}</p>
   <button class="btn" onclick={load}>Retry</button>
 {:else if feed}
-  <Dashboard {feed} {onComplete} {pending} />
+  <Dashboard {feed} {onComplete} {pending} {onAgent} {agentJobs} />
 {:else}
   <p class="muted">Loading…</p>
 {/if}

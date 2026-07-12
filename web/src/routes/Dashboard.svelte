@@ -1,10 +1,13 @@
 <script lang="ts">
   import type { Feed } from "$lib/types";
+  import type { AgentJob } from "$lib/api";
   import { hero, branchVMs, recentLog, catHue, dur } from "$lib/game";
   import { computeStats, WEEKDAY_NAMES } from "$lib/stats";
 
-  let { feed, onComplete = (_id: string) => {}, pending = new Set<string>() }:
-    { feed: Feed; onComplete?: (id: string) => void; pending?: Set<string> } = $props();
+  let { feed, onComplete = (_id: string) => {}, pending = new Set<string>(),
+        onAgent = (_id: string) => {}, agentJobs = {} }:
+    { feed: Feed; onComplete?: (id: string) => void; pending?: Set<string>;
+      onAgent?: (id: string) => void; agentJobs?: Record<string, AgentJob> } = $props();
 
   const h = $derived(hero(feed));
   const branches = $derived(branchVMs(feed));
@@ -15,6 +18,16 @@
 
   function safeHref(h: string | undefined): string | null {
     return h && /^(https?|tel|mailto):/i.test(h) ? h : null;
+  }
+
+  function isAgentBusy(id: string): boolean {
+    const j = agentJobs[id];
+    return !!j && (j.status === "queued" || j.status === "running");
+  }
+  function chipText(j: AgentJob): string {
+    if (j.status === "done") return j.summary ? `done — ${j.summary}` : "done";
+    if (j.status === "failed") return "failed";
+    return j.status;
   }
 </script>
 
@@ -61,6 +74,15 @@
       <button class="btn btn-done" aria-label="Done" aria-busy={pending.has(t.id)} disabled={pending.has(t.id)} onclick={() => onComplete(t.id)}>
         {pending.has(t.id) ? "Completing…" : "Done"}
       </button>
+      <div class="tc-agent">
+        <button class="btn" disabled={isAgentBusy(t.id)} onclick={() => onAgent(t.id)}
+                aria-label={"Ask Sidekick about " + t.task}>
+          {isAgentBusy(t.id) ? "Sidekick working…" : "Ask Sidekick"}
+        </button>
+        {#if agentJobs[t.id]}
+          <span class="chip chip-{agentJobs[t.id].status}">{chipText(agentJobs[t.id])}</span>
+        {/if}
+      </div>
     </article>
   {/each}
 </section>
@@ -104,3 +126,12 @@
     <div class="row"><span class="task">{r.task}</span><span class="when">{r.when}</span></div>
   {/each}
 </section>
+
+<style>
+  .tc-agent { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 999px;
+          border: 1px solid rgba(128, 128, 128, 0.35); opacity: 0.85; }
+  .chip-queued, .chip-running { animation: chip-pulse 1.5s ease-in-out infinite; }
+  .chip-failed { border-color: rgba(220, 60, 60, 0.6); }
+  @keyframes chip-pulse { 50% { opacity: 0.45; } }
+</style>

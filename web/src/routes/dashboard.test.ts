@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/svelte";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/svelte";
 import Dashboard from "./Dashboard.svelte";
 import type { Feed } from "$lib/types";
 
@@ -47,5 +47,31 @@ describe("Dashboard", () => {
     const panel = container.querySelector(".patterns");
     expect(panel?.textContent).toContain("phone 1");
     expect(panel?.textContent).toContain("consecutive days");
+  });
+});
+
+describe("Ask Sidekick", () => {
+  const job = (status: string, summary: string | null = null) => ({
+    id: "j1", task_id: "t2", action: "research", status, summary,
+    error: null, log_tail: null, created_at: "T", started_at: null, finished_at: null
+  });
+
+  it("fires onAgent with the task id", async () => {
+    const onAgent = vi.fn();
+    render(Dashboard, { props: { feed, onAgent } });
+    await fireEvent.click(screen.getByRole("button", { name: /ask sidekick about replace fan/i }));
+    expect(onAgent).toHaveBeenCalledWith("t1");
+  });
+
+  it("shows the status chip and disables only the busy task's button", () => {
+    render(Dashboard, { props: { feed, agentJobs: { t2: job("running") } as any } });
+    expect(screen.getByText("running")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /ask sidekick about email landlord/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /ask sidekick about replace fan/i })).toBeEnabled();
+  });
+
+  it("shows the summary on a done job", () => {
+    render(Dashboard, { props: { feed, agentJobs: { t2: job("done", "plan set") } as any } });
+    expect(screen.getByText("done — plan set")).toBeInTheDocument();
   });
 });

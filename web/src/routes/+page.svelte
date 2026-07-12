@@ -55,8 +55,25 @@
         // the agent's plan reaches this clone via the host's sync timer —
         // reload on done, but it may still take a couple of minutes to appear
         if (fresh.status === "done") await load();
-      } catch { /* transient — keep polling */ }
+      } catch (e) {
+        if (e instanceof ApiError) {
+          if (e.status === 401) {
+            stopPolling();
+            goto("/settings");
+            return;
+          }
+          if (e.status === 404) {
+            // job evaporated (server restart pruned it) — mark failed locally
+            agentJobs = { ...agentJobs, [j.task_id]: { ...j, status: "failed", error: "job lost" } };
+            continue;
+          }
+        }
+        // anything else is transient — keep polling
+      }
     }
+    // after processing all active jobs, check if any remain; if not, stop
+    const stillActive = Object.values(agentJobs).filter(jobActive);
+    if (stillActive.length === 0) stopPolling();
   }
 
   async function onAgent(id: string) {

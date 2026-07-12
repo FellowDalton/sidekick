@@ -16,7 +16,8 @@ vi.mock("$lib/api", () => ({
 }));
 
 import Page from "./+page.svelte";
-import { getFeed, startAgentJob, getAgentJob } from "$lib/api";
+import { getFeed, startAgentJob, getAgentJob, ApiError } from "$lib/api";
+import { goto } from "$app/navigation";
 
 const feed: Feed = {
   events: [],
@@ -64,5 +65,51 @@ describe("Ask Sidekick (dashboard route)", () => {
     await waitFor(() => expect(screen.getByText("Replace fan")).toBeInTheDocument());
     await fireEvent.click(screen.getByRole("button", { name: /ask sidekick/i }));
     await waitFor(() => expect(screen.getByText(/agent runner not configured/i)).toBeInTheDocument());
+  });
+
+  it("stops polling and redirects to /settings on 401", async () => {
+    vi.mocked(startAgentJob).mockResolvedValue(job("queued") as any);
+    vi.mocked(getAgentJob).mockRejectedValue(new ApiError(401, "unauthorized"));
+
+    render(Page);
+    await waitFor(() => expect(screen.getByText("Replace fan")).toBeInTheDocument());
+
+    vi.useFakeTimers();
+    await fireEvent.click(screen.getByRole("button", { name: /ask sidekick about replace fan/i }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(startAgentJob).toHaveBeenCalledWith("t1", "research");
+
+    await vi.advanceTimersByTimeAsync(5000);  // first poll triggers 401
+    expect(getAgentJob).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(goto)).toHaveBeenCalledWith("/settings");
+
+    await vi.advanceTimersByTimeAsync(5000);  // verify no further polls
+    expect(getAgentJob).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  it("stops polling when all jobs reach terminal status", async () => {
+    vi.mocked(startAgentJob).mockResolvedValue(job("queued") as any);
+    vi.mocked(getAgentJob).mockResolvedValue(job("done", "summary") as any);
+
+    render(Page);
+    await waitFor(() => expect(screen.getByText("Replace fan")).toBeInTheDocument());
+
+    vi.useFakeTimers();
+    await fireEvent.click(screen.getByRole("button", { name: /ask sidekick about replace fan/i }));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(startAgentJob).toHaveBeenCalledWith("t1", "research");
+
+    await vi.advanceTimersByTimeAsync(5000);  // poll 1 → done
+    expect(getAgentJob).toHaveBeenCalledTimes(1);
+    expect(getFeed).toHaveBeenCalledTimes(2);  // mount + reload on done
+
+    await vi.advanceTimersByTimeAsync(5000);  // verify no further polls
+    expect(getAgentJob).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
   });
 });

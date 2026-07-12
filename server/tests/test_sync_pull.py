@@ -103,3 +103,60 @@ def test_main_exit_codes(vault_repo, bare_remote, tmp_path, monkeypatch, capsys)
     git(["commit", "-m", "local boom"], vault_repo)
     assert sync_pull.main() == 1
     assert "sync-pull" in capsys.readouterr().err
+
+
+# ── failure-streak alert (sub-project 4: closes the git-sync plan's deferral) ──
+
+def _make_conflict(vault_repo, bare_remote, tmp_path, name="clash.md"):
+    _push_remote_task(bare_remote, tmp_path, name, "remote content\n")
+    (vault_repo / "tasks" / name).write_text("local content\n", encoding="utf-8")
+    git(["add", "-A"], vault_repo)
+    git(["commit", "-m", f"local {name}"], vault_repo)
+
+
+def test_alert_fires_once_on_third_consecutive_failure(vault_repo, bare_remote, tmp_path,
+                                                       monkeypatch, capsys):
+    from server import sync_pull, push
+    monkeypatch.setenv("SIDEKICK_VAULT", str(vault_repo))
+    monkeypatch.setenv("SIDEKICK_API_TOKEN", "test-token")
+    _make_conflict(vault_repo, bare_remote, tmp_path)
+    alerts = []
+    monkeypatch.setattr(push, "send_to_identity",
+                        lambda config, name, title, body: (alerts.append((name, body)), 1)[1])
+    assert sync_pull.main() == 1
+    assert sync_pull.main() == 1
+    assert alerts == []                      # not yet
+    assert sync_pull.main() == 1
+    assert len(alerts) == 1                  # exactly on the third
+    assert alerts[0][0] == "dalton" and "3" in alerts[0][1]
+    assert sync_pull.main() == 1
+    assert len(alerts) == 1                  # once per streak, not every run
+    capsys.readouterr()
+
+
+def test_success_resets_the_streak(vault_repo, bare_remote, tmp_path, monkeypatch, capsys):
+    from server import sync_pull
+    monkeypatch.setenv("SIDEKICK_VAULT", str(vault_repo))
+    monkeypatch.setenv("SIDEKICK_API_TOKEN", "test-token")
+    streak = vault_repo / ".git" / "sidekick-sync-failures"
+    streak.write_text("2", encoding="utf-8")
+    _push_remote_task(bare_remote, tmp_path, "fine.md", "ok\n")
+    assert sync_pull.main() == 0
+    assert not streak.exists()
+    capsys.readouterr()
+
+
+def test_alert_failure_never_masks_the_sync_error(vault_repo, bare_remote, tmp_path,
+                                                  monkeypatch, capsys):
+    from server import sync_pull, push
+    monkeypatch.setenv("SIDEKICK_VAULT", str(vault_repo))
+    monkeypatch.setenv("SIDEKICK_API_TOKEN", "test-token")
+    _make_conflict(vault_repo, bare_remote, tmp_path)
+    (vault_repo / ".git" / "sidekick-sync-failures").write_text("2", encoding="utf-8")
+
+    def boom(*a, **kw):
+        raise RuntimeError("web push not configured")
+
+    monkeypatch.setattr(push, "send_to_identity", boom)
+    assert sync_pull.main() == 1             # still the sync failure's exit code
+    assert "sync-pull:" in capsys.readouterr().err

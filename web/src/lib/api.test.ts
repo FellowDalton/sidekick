@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getFeed, getMe, createTask, completeTask, ApiError } from "./api";
+import { getFeed, getMe, createTask, completeTask, getVapidPublicKey, subscribePush, ApiError } from "./api";
 import { settings } from "./settings";
 
 function mockFetch(status: number, body: unknown) {
@@ -96,5 +96,32 @@ describe("createTask (shared)", () => {
     await createTask("Buy milk", "errand");
     const [, opts] = f.mock.calls[0];
     expect(JSON.parse(opts.body)).toEqual({ title: "Buy milk", category: "errand" });
+  });
+});
+
+describe("push api", () => {
+  it("GETs the VAPID public key with the bearer token", async () => {
+    const f = mockFetch(200, { key: "BPubKey" });
+    vi.stubGlobal("fetch", f);
+    expect(await getVapidPublicKey()).toBe("BPubKey");
+    const [url, opts] = f.mock.calls[0];
+    expect(url).toBe("/api/push/vapid-public-key");
+    expect(opts.headers["Authorization"]).toBe("Bearer t0ken");
+  });
+
+  it("POSTs the subscription JSON to /api/push/subscribe", async () => {
+    const f = mockFetch(200, { ok: true, subscriptions: 1 });
+    vi.stubGlobal("fetch", f);
+    const sub = { endpoint: "https://push.example/e", keys: { p256dh: "p", auth: "a" } };
+    await subscribePush(sub as PushSubscriptionJSON);
+    const [url, opts] = f.mock.calls[0];
+    expect(url).toBe("/api/push/subscribe");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body)).toEqual(sub);
+  });
+
+  it("surfaces 503 when push is not configured on the host", async () => {
+    vi.stubGlobal("fetch", mockFetch(503, { error: "web push not configured" }));
+    await expect(getVapidPublicKey()).rejects.toMatchObject({ status: 503 });
   });
 });

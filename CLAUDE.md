@@ -59,6 +59,8 @@ The wiki is the orchestrator's durable life-knowledge — the sanctioned **model
 
 ## The nudge — the active push (§8, the load-bearing piece)
 
+**The VPS is the primary nudge path now:** `server/nudge_job.py` + `deploy/sidekick-nudge.timer` send the daily nudge as a web-push notification to the phone (setup: `deploy/README.md` → "Web-push nudges"). Everything below is the **offline fallback** for when the VPS route is down.
+
 `nudge.py` is fired by **launchd** (not Claude Code — a session can't push itself). It reads the vault, decides whether to nudge, and sends one message to you via Beeper → iMessage. Claude judges and words it; if the Claude call fails, a deterministic fallback still sends (longest-sitting task with a plan → its first step). It stays silent when nothing's genuinely stalled.
 
 ### One-time setup

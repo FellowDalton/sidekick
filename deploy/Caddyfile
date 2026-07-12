@@ -21,6 +21,10 @@
 	}
 	handle {
 		root * /srv/sidekick/web/build
+		# push-sw.js is importScripts()'d by the generated SW; updateViaCache pins
+		# imported scripts through the HTTP cache, so without this a future edit
+		# to push-sw.js can lag on devices until they happen to bust the cache.
+		header /push-sw.js Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
 	}

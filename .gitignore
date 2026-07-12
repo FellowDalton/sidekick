@@ -5,6 +5,9 @@ nudge.log
 # host API idempotency store (runtime state, per-vault)
 .sidekick-idempotency.json
 
+# web-push subscription store (runtime state, per-vault; never in git)
+.sidekick-push.json
+
 # generated copies mirrored into the extension by `sidekick.py regenerate`
 chrome-extension/sidekick-data.js
 chrome-extension/sidekick-render.js

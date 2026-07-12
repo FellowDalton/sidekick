@@ -167,20 +167,22 @@ class AgentJobs:
         job = self.get(job_id)
         if job is None or job["status"] != "queued":
             return                       # e.g. marked interrupted meanwhile
-        clone, cmd, timeout = self._runner_env()
-        self._update(job_id, status="running", started_at=_now_iso())
-        log_file = log_path(self.vault, job_id)
-        os.makedirs(os.path.dirname(log_file), exist_ok=True)
         try:
+            clone, cmd, timeout = self._runner_env()
+            self._update(job_id, status="running", started_at=_now_iso())
+            log_file = log_path(self.vault, job_id)
+            os.makedirs(os.path.dirname(log_file), exist_ok=True)
             if not clone or not os.path.isdir(os.path.join(clone, ".git")):
                 raise RuntimeError(f"agent clone not available: {clone!r}")
             git_sync.pull_latest(clone)                # fresh state before every job
             if job["action"] == "research":
                 prompt = agent_prompts.research_prompt(
                     job["task_id"], job["title"], job["category"])
-            else:
+            elif job["action"] == "breakdown":
                 prompt = agent_prompts.breakdown_prompt(
                     job["task_id"], job["title"], job["category"], job["shared"])
+            else:
+                raise ValueError(f"unknown action: {job['action']}")
             with open(log_file, "w", encoding="utf-8") as lf:
                 # start_new_session=True puts the command in its own process
                 # group so a timeout can kill the whole tree, not just the
@@ -193,7 +195,10 @@ class AgentJobs:
                 try:
                     returncode = proc.wait(timeout=timeout)
                 except subprocess.TimeoutExpired:
-                    os.killpg(proc.pid, signal.SIGKILL)
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass  # group already gone — nothing to kill
                     proc.wait()
                     raise
             if returncode != 0:

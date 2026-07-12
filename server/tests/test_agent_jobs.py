@@ -177,6 +177,15 @@ def test_execute_unconfigured_clone_fails_cleanly(vault_repo, monkeypatch):
     assert "agent clone not available" in failed["error"]
 
 
+def test_execute_unknown_action_fails_cleanly(vault_repo, agent_env):
+    aj = AgentJobs(str(vault_repo), start_worker=False)
+    job = _enqueue(aj, action="unknown-action")
+    aj._execute(job["id"])
+    failed = aj.get(job["id"])
+    assert failed["status"] == "failed"
+    assert "unknown action" in failed["error"]
+
+
 def test_worker_thread_drains_the_queue(vault_repo, agent_env):
     aj = AgentJobs(str(vault_repo))                    # worker ON (the default)
     job = _enqueue(aj)

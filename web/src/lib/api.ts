@@ -52,3 +52,16 @@ export async function completeTask(id: string, completedAt: string): Promise<Com
     body: JSON.stringify({ completed_at: completedAt })
   }));
 }
+
+export async function getVapidPublicKey(): Promise<string> {
+  const res = await handle(await fetch(`${base()}/api/push/vapid-public-key`, { headers: headers() }));
+  return res.key;
+}
+
+export async function subscribePush(sub: PushSubscriptionJSON): Promise<void> {
+  await handle(await fetch(`${base()}/api/push/subscribe`, {
+    method: "POST",
+    headers: headers({ "Content-Type": "application/json" }),
+    body: JSON.stringify(sub)
+  }));
+}

@@ -17,6 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import sidekick                       # noqa: E402
 from server.config import load_config  # noqa: E402
 from server import git_sync            # noqa: E402
+from server import push                # noqa: E402
 from server.idempotency import IdempotencyStore  # noqa: E402
 from server.vault_lock import vault_lock  # noqa: E402
 
@@ -64,6 +65,34 @@ def create_app(config=None):
 
     def _read_json(request_body):
         return request_body if isinstance(request_body, dict) else {}
+
+    @app.get("/push/vapid-public-key")
+    def get_vapid_public_key(authorization: str = Header(default="")):
+        require_auth(authorization)
+        key = os.environ.get("SIDEKICK_VAPID_PUBLIC", "")
+        if not key:
+            raise HTTPException(status_code=503, detail="web push not configured")
+        return {"key": key}
+
+    @app.post("/push/subscribe")
+    async def post_push_subscribe(request: Request,
+                                  authorization: str = Header(default="")):
+        # stored under the TOKEN's identity — never client-chosen (same rule as `from`)
+        ident = require_auth(authorization)
+        try:
+            data = _read_json(await request.json())
+        except Exception:
+            data = {}
+        endpoint = data.get("endpoint")
+        keys = data.get("keys")
+        if (not endpoint or not isinstance(endpoint, str) or not isinstance(keys, dict)
+                or not keys.get("p256dh") or not keys.get("auth")):
+            raise HTTPException(status_code=400,
+                                detail="a PushSubscription JSON (endpoint + keys) is required")
+        sub = {"endpoint": endpoint,
+               "keys": {"p256dh": keys["p256dh"], "auth": keys["auth"]}}
+        count = push.save_subscription(config.vault, ident["name"], sub)
+        return {"ok": True, "subscriptions": count}
 
     def _idem_replay_or_run(scope, idem_key, fn):
         """Replay cached response or run fn, keying by (scope, idem_key) to prevent cross-identity cache hits.

@@ -9,6 +9,8 @@ export interface ActiveTask {
   category: Category | string;
   sat_for_hours: number | null;
   plan: Plan | null;
+  from?: string | null;   // who created it — server-assigned from the token identity
+  shared?: boolean;       // membership in the shared list
 }
 
 export interface LedgerEvent {

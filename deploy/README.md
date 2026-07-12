@@ -96,6 +96,30 @@ curl -s -H "Authorization: Bearer $(grep API_TOKEN /etc/sidekick.env | cut -d= -
   http://127.0.0.1:8080/api/feed | head -c 200    # → JSON {"events":...,"active":...}
 ```
 
+### Two users (token map)
+
+For more than one person (e.g. you + a partner), replace the single `SIDEKICK_API_TOKEN`
+line in `/etc/sidekick.env` with a token→identity map:
+
+```
+SIDEKICK_API_TOKENS={"<dalton-token>":{"name":"dalton","role":"full"},"<wife-token>":{"name":"wife","role":"shared"}}
+```
+
+Keep it **compact JSON on one line** — systemd's `EnvironmentFile` parsing doesn't handle
+multi-line values. Generate each token with `openssl rand -hex 24`. The legacy
+`SIDEKICK_API_TOKEN` (single token) still works on its own and is treated as role `full`.
+
+Verify after editing:
+```bash
+sudo systemctl restart sidekick
+# repeat for EACH token in the map:
+curl -s -H "Authorization: Bearer <token>" https://sidekick.tail81b55b.ts.net/api/me
+# → {"name":"dalton","role":"full"}  or  {"name":"wife","role":"shared"}
+```
+Hitting `/api/me` for every token isn't just an identity check — it's also the smoke test
+for systemd's env-file JSON parsing, which has quote-handling edge cases (e.g. stray
+escaping around the embedded double quotes can silently truncate the value).
+
 ## Phase D — put it on your tailnet
 
 If you don't have Tailscale yet, make a free account at tailscale.com (the Personal plan

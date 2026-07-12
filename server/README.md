@@ -12,15 +12,25 @@ All require `Authorization: Bearer <token>`. Mutations accept an `Idempotency-Ke
 | Method | Path | Body | Result |
 |---|---|---|---|
 | GET  | `/feed` | — | `{ "events": [...], "active": [...] }` |
+| GET  | `/me` | — | `{ "name": ..., "role": "full"\|"shared" }` for the calling token |
 | POST | `/tasks` | `{ "title", "category" }` (`phone\|admin\|errand\|chore`) | `201` task entry |
 | POST | `/tasks/{id}/complete` | `{ "completed_at"? }` (ISO) | `200` result |
 
 Errors render as `{ "error": "<message>" }` (`401` no/bad token, `400` bad input,
 `404` unknown task, `409`/`5xx` git/host trouble).
 
+Role `shared` (the shared-list token) is enforced server-side on every endpoint:
+`/feed` returns only `shared: true` tasks with `events: []`; `POST /tasks` is forced
+`shared: true`; complete is 404 unless the task is shared. `from` is always set from
+the token identity — never from the client.
+
 ## Configuration (environment)
 - `SIDEKICK_VAULT` (required) — path to the vault working clone on this host.
-- `SIDEKICK_API_TOKEN` (required) — the bearer token the phone sends.
+- `SIDEKICK_API_TOKENS` — JSON map of bearer tokens to identities, e.g.
+  `{"<token>":{"name":"dalton","role":"full"},"<token2>":{"name":"wife","role":"shared"}}`
+  (compact JSON, no spaces — systemd `EnvironmentFile`-safe).
+- `SIDEKICK_API_TOKEN` (legacy fallback) — a single token, mapped to `dalton`/`full`.
+  One of the two is required; `SIDEKICK_API_TOKENS` wins when both are set.
 - `SIDEKICK_GIT_PUSH` (default `1`) — set `0` to commit locally without pushing (dev).
 - `SIDEKICK_GIT_REMOTE` (default `origin`) — the canonical remote to publish to.
 

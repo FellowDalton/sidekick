@@ -11,6 +11,7 @@ test("read, capture, and complete against a mocked API", async ({ page }) => {
 
   let created = false, completed = false;
   await page.route("**/api/feed", r => r.fulfill({ json: feed }));
+  await page.route("**/api/me", r => r.fulfill({ json: { name: "dalton", role: "full" } }));
   await page.route("**/api/tasks", r => {
     if (r.request().method() !== "POST") { r.continue(); return; }
     created = true;

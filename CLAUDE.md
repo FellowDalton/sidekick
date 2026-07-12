@@ -1,7 +1,7 @@
 # Sidekick — operating notes for Claude Code
 
 Everything lives in this vault (one git repo). No Google, no OAuth, no API.
-- `tasks/*.md` — open tasks, one markdown file each, metadata in YAML frontmatter (category, created, status, plan). Editable by hand in Obsidian.
+- `tasks/*.md` — open tasks, one markdown file each, metadata in YAML frontmatter (category, created, status, plan; optional `from:` creator and `shared: true` shared-list membership — code-written via sidekick.py). Editable by hand in Obsidian.
 - `ledger.jsonl` — completed tasks, append-only, the game's spine. **Code writes it; never hand-edit, never let the model rewrite it.**
 - `sidekick-data.js` — generated feed the dashboard reads. **Never hand-edit.**
 - `sidekick-render.js` — the dashboard's render logic, shared by `sidekick.html` and the Chrome new tab. Static. `regenerate` copies it (with the feed) into `chrome-extension/`.

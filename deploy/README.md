@@ -222,6 +222,63 @@ Subscriptions live in `/srv/sidekick/.sidekick-push.json` (gitignored). The sync
 uses the same channel: three consecutive `git pull` failures send one alert.
 The old Mac path (`nudge.py` + launchd + Beeper) remains the documented offline fallback.
 
+## Agent runner (pi headless)
+
+The API can hand a task to Claude ("Ask Sidekick" / "Break it down"): jobs run
+inside the API process, strictly one at a time, as `pi -p "<prompt>"` in a
+**separate clone** — never `/srv/sidekick`. Results arrive as pushed commits;
+the sync timer delivers them to the serving clone and the phones.
+
+> **Deviation from the design spec, on purpose:** the spec calls for a dedicated
+> low-privilege user. Spawning subprocesses as a *different* user from inside
+> the hardened systemd API service is nontrivial (sudoers or a second daemon),
+> so the agent runs as the same `sidekick` service user, isolated only by the
+> separate clone — pi can reach anything the `sidekick` user can, including the
+> serving clone. Accepted for now; revisit with a separate jobs daemon if it
+> ever bites.
+
+One-time setup on the VPS:
+
+    # 1. the agent's own clone (reuses the sidekick user's deploy key)
+    sudo -u sidekick mkdir -p /home/sidekick/agent
+    sudo -u sidekick git clone git@github.com:FellowDalton/sidekick.git /home/sidekick/agent/sidekick
+    sudo -u sidekick git -C /home/sidekick/agent/sidekick config user.name "Sidekick Agent"
+    sudo -u sidekick git -C /home/sidekick/agent/sidekick config user.email "agent@sidekick.local"
+
+    # 2. the prompts tell the model to run `python3 sidekick.py ...` — it needs pyyaml
+    sudo apt-get install -y python3-yaml
+
+    # 3. install pi for the sidekick user (see pi.dev install docs), then bring
+    #    the auth over from the Mac (subscription OAuth tokens; they auto-refresh).
+    #    On the Mac:  scp -r ~/.pi/agent root@<vps-ip>:/home/sidekick/.pi/agent
+    sudo chown -R sidekick:sidekick /home/sidekick/.pi
+    sudo chmod 600 /home/sidekick/.pi/agent/auth.json
+    sudo -u sidekick -H pi -p "reply with exactly: ok"      # auth smoke test
+
+Add to `/etc/sidekick.env` (then `sudo systemctl restart sidekick`):
+
+    SIDEKICK_AGENT_CLONE=/home/sidekick/agent/sidekick
+    # SIDEKICK_AGENT_CMD=pi -p          # the default; use an absolute path
+    #                                     (e.g. /home/sidekick/.local/bin/pi -p)
+    #                                     if pi is not on the service's PATH
+    # SIDEKICK_AGENT_TIMEOUT=900        # seconds; the default
+
+Dry-run smoke test **without spending model quota**: temporarily set
+`SIDEKICK_AGENT_CMD=echo` in `/etc/sidekick.env`, restart, then:
+
+    curl -s -X POST -H "Authorization: Bearer <token>" -H 'Content-Type: application/json' \
+      -d '{"action":"research"}' https://sidekick.tail81b55b.ts.net/api/tasks/<task-id>/agent
+    # → 202 {"id":"<job-id>","status":"queued",...}
+    curl -s -H "Authorization: Bearer <token>" https://sidekick.tail81b55b.ts.net/api/agent/jobs/<job-id>
+    # → "status":"done" with the prompt's last line echoed back as the summary
+
+Put `SIDEKICK_AGENT_CMD` back (or remove the line) and restart. Job logs live in
+`/srv/sidekick/.sidekick-agent-logs/<job-id>.log`; job state in
+`/srv/sidekick/.sidekick-agent-jobs.json` (both gitignored). Jobs consume
+Claude/Codex subscription quota — the single-worker queue is what bounds spend.
+An API restart fails any queued/running job ("interrupted by restart"); just
+start it again from the phone.
+
 ---
 
 ## Operating notes

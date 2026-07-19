@@ -11,6 +11,9 @@ export interface ActiveTask {
   plan: Plan | null;
   from?: string | null;   // who created it — server-assigned from the token identity
   shared?: boolean;       // membership in the shared list
+  parent?: string | null; // sub-task linkage — id of the parent task
+  status?: "open" | "done"; // "done" = completed child still shown under its open parent
+  completed_at?: string | null; // set on done children only
 }
 
 export interface LedgerEvent {

@@ -184,6 +184,29 @@ def test_execute_failed_push_resets_to_pre_job_baseline(vault_repo, agent_clone,
     assert out.stdout.strip() == ""
 
 
+def test_execute_pins_sidekick_vault_env_to_the_clone(vault_repo, agent_clone, make_script,
+                                                       monkeypatch, tmp_path):
+    """Incident ad1e97cb: the systemd EnvironmentFile sets SIDEKICK_VAULT to the
+    SERVING clone. If that leaks into the pi subprocess, sidekick.py (which
+    prefers SIDEKICK_VAULT over its own script location) writes into the serving
+    vault instead of the agent's own clone. The runner must pin SIDEKICK_VAULT to
+    the agent clone for the child regardless of what the parent process has set."""
+    record_vault = make_script("record-vault",
+                               'printf "%s" "$SIDEKICK_VAULT" > vault-env.txt\n')
+    monkeypatch.setenv("SIDEKICK_AGENT_CLONE", str(agent_clone))
+    monkeypatch.setenv("SIDEKICK_AGENT_CMD", record_vault)
+    monkeypatch.setenv("SIDEKICK_AGENT_TIMEOUT", "30")
+    monkeypatch.setenv("SIDEKICK_VAULT", str(tmp_path / "wrong-vault"))  # the serving clone, in prod
+
+    aj = AgentJobs(str(vault_repo), start_worker=False)
+    job = _enqueue(aj)
+    aj._execute(job["id"])
+
+    assert aj.get(job["id"])["status"] == "done"
+    recorded = (agent_clone / "vault-env.txt").read_text(encoding="utf-8")
+    assert recorded == str(agent_clone)
+
+
 def test_execute_timeout_fails_the_job(vault_repo, agent_clone, make_script, monkeypatch):
     slow = make_script("slow-pi", "sleep 5\n")
     monkeypatch.setenv("SIDEKICK_AGENT_CLONE", str(agent_clone))

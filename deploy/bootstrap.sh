@@ -104,7 +104,16 @@ install -m 644 "$REPO/deploy/Caddyfile" /etc/caddy/Caddyfile
 systemctl reload caddy 2>/dev/null || systemctl restart caddy
 
 # --- summary ----------------------------------------------------------------------------
-TOKEN_NOW="$(grep -E '^SIDEKICK_API_TOKEN=' "$ENV_FILE" | cut -d= -f2-)"
+# tolerant of both the legacy single token (SIDEKICK_API_TOKEN=) and the newer
+# JSON map (SIDEKICK_API_TOKENS=) — `|| true` because grep exits 1 on no match,
+# which under `set -euo pipefail` would otherwise kill the script here, after
+# all real work is already done (this bit the deploy today)
+TOKEN_LINE="$(grep -E '^SIDEKICK_API_TOKENS?=' "$ENV_FILE" || true)"
+case "$TOKEN_LINE" in
+	SIDEKICK_API_TOKENS=*) TOKEN_NOW="(token map configured — see SIDEKICK_API_TOKENS)" ;;
+	SIDEKICK_API_TOKEN=*)  TOKEN_NOW="${TOKEN_LINE#SIDEKICK_API_TOKEN=}" ;;
+	*)                     TOKEN_NOW="(no token found in $ENV_FILE)" ;;
+esac
 cat <<EOF
 
 $(log "Bootstrap complete")

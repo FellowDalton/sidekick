@@ -196,9 +196,16 @@ class AgentJobs:
                 # immediate child — a wrapper (pi, sh -c ...) that forks further
                 # work would otherwise be orphaned and keep running past the
                 # timeout instead of being reaped.
+                # pin SIDEKICK_VAULT to the agent clone: in production the
+                # systemd EnvironmentFile sets it to the SERVING clone, and
+                # sidekick.py prefers SIDEKICK_VAULT over its own script
+                # location — left untouched, the agent's writes land in
+                # /srv/sidekick instead of its own clone (incident ad1e97cb)
+                child_env = dict(os.environ, SIDEKICK_VAULT=clone)
                 proc = subprocess.Popen(shlex.split(cmd) + [prompt], cwd=clone,
                                         stdout=lf, stderr=subprocess.STDOUT,
-                                        text=True, start_new_session=True)
+                                        text=True, start_new_session=True,
+                                        env=child_env)
                 try:
                     returncode = proc.wait(timeout=timeout)
                 except subprocess.TimeoutExpired:

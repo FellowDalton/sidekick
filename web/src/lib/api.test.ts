@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getFeed, getMe, createTask, completeTask, getVapidPublicKey, subscribePush, startAgentJob, getAgentJob, ApiError } from "./api";
+import { getFeed, getMe, createTask, completeTask, getVapidPublicKey, subscribePush, startAgentJob, getAgentJob, createList, deleteList, ApiError } from "./api";
 import { settings } from "./settings";
 
 function mockFetch(status: number, body: unknown) {
@@ -159,5 +159,37 @@ describe("agent api", () => {
   it("surfaces 403 when the role may not run the action", async () => {
     vi.stubGlobal("fetch", mockFetch(403, { error: "forbidden" }));
     await expect(startAgentJob("t1", "research")).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+describe("named lists api", () => {
+  it("createList POSTs the name to /api/lists", async () => {
+    const f = mockFetch(201, { id: "groceries", name: "Groceries", created: "2026-07-19T00:00:00Z" });
+    vi.stubGlobal("fetch", f);
+    const entry = await createList("Groceries");
+    expect(entry.id).toBe("groceries");
+    const [url, opts] = f.mock.calls[0];
+    expect(url).toContain("/api/lists");
+    expect(JSON.parse(opts.body)).toEqual({ name: "Groceries" });
+    expect(typeof opts.headers["Idempotency-Key"]).toBe("string");
+    expect(opts.headers["Idempotency-Key"].length).toBeGreaterThan(0);
+  });
+
+  it("deleteList DELETEs /api/lists/{id}", async () => {
+    const f = mockFetch(200, { ok: true });
+    vi.stubGlobal("fetch", f);
+    await deleteList("groceries");
+    const [url, opts] = f.mock.calls[0];
+    expect(url).toContain("/api/lists/groceries");
+    expect(opts.method).toBe("DELETE");
+  });
+
+  it("createTask includes list only when given", async () => {
+    const f = mockFetch(201, { id: "t", task: "Buy milk" });
+    vi.stubGlobal("fetch", f);
+    await createTask("Buy milk", "errand", true, "groceries");
+    const [, opts] = f.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual(
+      { title: "Buy milk", category: "errand", shared: true, list: "groceries" });
   });
 });

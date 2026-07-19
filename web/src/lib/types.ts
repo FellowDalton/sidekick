@@ -14,7 +14,10 @@ export interface ActiveTask {
   parent?: string | null; // sub-task linkage — id of the parent task
   status?: "open" | "done"; // "done" = completed child still shown under its open parent
   completed_at?: string | null; // set on done children only
+  list?: string | null;   // named-list membership — id of the list
 }
+
+export interface TaskList { id: string; name: string; created: string; }
 
 export interface LedgerEvent {
   task: string;
@@ -28,4 +31,4 @@ export interface LedgerEvent {
   from?: string | null;
 }
 
-export interface Feed { events: LedgerEvent[]; active: ActiveTask[]; }
+export interface Feed { events: LedgerEvent[]; active: ActiveTask[]; lists?: TaskList[]; }

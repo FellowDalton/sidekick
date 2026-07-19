@@ -1,6 +1,6 @@
 import { get } from "svelte/store";
 import { settings } from "./settings";
-import type { Feed, ActiveTask, Category } from "./types";
+import type { Feed, ActiveTask, Category, TaskList } from "./types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); this.name = "ApiError"; }
@@ -37,11 +37,29 @@ export async function getMe(): Promise<Identity> {
   return handle(await fetch(`${base()}/api/me`, { headers: headers() }));
 }
 
-export async function createTask(title: string, category: Category, shared = false): Promise<ActiveTask> {
+export async function createTask(title: string, category: Category, shared = false, list?: string): Promise<ActiveTask> {
+  const body: Record<string, unknown> = { title, category };
+  if (shared) body.shared = true;
+  if (list) body.list = list;
   return handle(await fetch(`${base()}/api/tasks`, {
     method: "POST",
     headers: headers({ "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }),
-    body: JSON.stringify(shared ? { title, category, shared: true } : { title, category })
+    body: JSON.stringify(body)
+  }));
+}
+
+export async function createList(name: string): Promise<TaskList> {
+  return handle(await fetch(`${base()}/api/lists`, {
+    method: "POST",
+    headers: headers({ "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }),
+    body: JSON.stringify({ name })
+  }));
+}
+
+export async function deleteList(id: string): Promise<void> {
+  await handle(await fetch(`${base()}/api/lists/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: headers()
   }));
 }
 

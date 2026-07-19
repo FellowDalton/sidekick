@@ -108,10 +108,19 @@ def task_path(task_id):
     return os.path.join(TASKS, task_id + ".md")
 
 # ── capture / orchestrator helpers (write side) ─────────────────────────────
-def create_task(title, category, *, from_=None, shared=False):
+def create_task(title, category, *, from_=None, shared=False, parent=None):
     """Create an open task. `from_` (dalton|wife|sidekick) and `shared` are the
     shared-list frontmatter fields (spec sub-project 2) — written only when set,
-    so a plain create produces the same file as before."""
+    so a plain create produces the same file as before. `parent` (a task id) links
+    a sub-task to its parent (nested sub-tasks spec) — the parent must exist and
+    be open."""
+    if parent is not None:
+        try:
+            pfm, _ = read_note(task_path(parent))
+        except FileNotFoundError:
+            raise ValueError(f"parent task {parent} not found")
+        if pfm.get("status", "open") != "open":
+            raise ValueError(f"parent task {parent} is not open")
     os.makedirs(TASKS, exist_ok=True)
     task_id = dt.datetime.now().strftime("%Y%m%d") + "-" + slug(title)
     n, base = 2, task_id
@@ -122,6 +131,8 @@ def create_task(title, category, *, from_=None, shared=False):
         fm["from"] = from_
     if shared:
         fm["shared"] = True
+    if parent:
+        fm["parent"] = parent
     write_note(task_path(task_id), fm, f"# {title}\n")
     print(f"created {task_id}")
     return task_id
@@ -371,6 +382,8 @@ def main():
     pn = sub.add_parser("new");      pn.add_argument("title"); pn.add_argument("--category", required=True)
     pn.add_argument("--from", dest="from_", default=None, help="who created it (dalton|wife|sidekick)")
     pn.add_argument("--shared", action="store_true", help="put it on the shared list")
+    pn.add_argument("--parent", default=None,
+                    help="parent task id — links this as a sub-task (parent must be open)")
     pp = sub.add_parser("set-plan"); pp.add_argument("id"); pp.add_argument("--file", help="JSON {summary, steps}; omit to read stdin")
     pc = sub.add_parser("complete"); pc.add_argument("id")
     pc.add_argument("--note", help="what worked / what happened — recorded in the ledger event")
@@ -378,18 +391,21 @@ def main():
                     help="which surface completed it (default: cli)")
     a = ap.parse_args()
 
-    if a.cmd == "regenerate":
-        regenerate()
-    elif a.cmd == "wiki":
-        wiki_index()
-    elif a.cmd == "new":
-        create_task(a.title, a.category, from_=a.from_, shared=a.shared); regenerate()
-    elif a.cmd == "set-plan":
-        raw = open(a.file, encoding="utf-8").read() if a.file else sys.stdin.read()
-        plan = json.loads(raw)
-        set_plan(a.id, plan["summary"], plan["steps"]); regenerate()
-    elif a.cmd == "complete":
-        complete(a.id, note=a.note, via=a.via); regenerate()
+    try:
+        if a.cmd == "regenerate":
+            regenerate()
+        elif a.cmd == "wiki":
+            wiki_index()
+        elif a.cmd == "new":
+            create_task(a.title, a.category, from_=a.from_, shared=a.shared, parent=a.parent); regenerate()
+        elif a.cmd == "set-plan":
+            raw = open(a.file, encoding="utf-8").read() if a.file else sys.stdin.read()
+            plan = json.loads(raw)
+            set_plan(a.id, plan["summary"], plan["steps"]); regenerate()
+        elif a.cmd == "complete":
+            complete(a.id, note=a.note, via=a.via); regenerate()
+    except ValueError as e:
+        sys.exit(str(e))
 
 if __name__ == "__main__":
     main()

@@ -65,6 +65,13 @@ def test_feed_exposes_list_field(vault):
     assert by_id[without]["list"] is None
 
 
+def test_create_task_rejects_parent_and_list_together(vault):
+    parent_id = sidekick.create_task("Plan the party", "chore")
+    sidekick.list_new("Groceries")
+    with pytest.raises(ValueError):
+        sidekick.create_task("Book the venue", "chore", parent=parent_id, list_="groceries")
+
+
 def test_task_slug_keeps_unicode(vault):
     """Task IDs should preserve unicode characters (e.g., Danish æøå), not strip them."""
     tid = sidekick.create_task("Ring til tandlægen", "phone")

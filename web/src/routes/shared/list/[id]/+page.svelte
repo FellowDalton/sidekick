@@ -5,7 +5,7 @@
   import { getFeed, createTask, completeTask, startAgentJob, getAgentJob, ApiError, type AgentJob } from "$lib/api";
   import { hasToken } from "$lib/settings";
   import { buildTree, doneCount, showNudge, type TreeNode } from "$lib/tree";
-  import type { ActiveTask, Feed } from "$lib/types";
+  import type { Feed } from "$lib/types";
 
   const listId = $derived(page.params.id);
 
@@ -20,14 +20,15 @@
   const listName = $derived(
     listId === "todos" ? "To-dos" : (feed?.lists ?? []).find(l => l.id === listId)?.name ?? null);
 
-  const newestFirst = (list: ActiveTask[]) =>
-    [...list].sort((a, b) => (a.sat_for_hours ?? 0) - (b.sat_for_hours ?? 0));
-
-  // full tree of shared tasks, then keep only this list's roots — children follow
-  const tree = $derived(feed
-    ? buildTree(newestFirst(feed.active.filter(t => t.shared)))
-        .filter(n => (n.task.list ?? "todos") === listId)
-    : []);
+  // full tree of shared tasks (built from feed order — creation order — so
+  // breakdown children stay step-1-first), then keep only this list's roots,
+  // sorted newest-first; children are left in feed order underneath.
+  const tree = $derived.by(() => {
+    if (!feed) return [];
+    const roots = buildTree(feed.active.filter(t => t.shared))
+      .filter(n => (n.task.list ?? "todos") === listId);
+    return [...roots].sort((a, b) => (a.task.sat_for_hours ?? 0) - (b.task.sat_for_hours ?? 0));
+  });
 
   async function load() {
     error = "";

@@ -110,6 +110,8 @@ def deterministic_message(t):
 def claude_message(cfg, active, events):
     rows = []
     for t in active:
+        if t.get("status", "open") != "open":
+            continue                                    # done sub-tasks ride along in read_active(); not nudge-worthy
         plan = t.get("plan")
         first = plan["steps"][0]["text"] if (plan and plan.get("steps")) else None
         sat = t.get("sat_for_hours")

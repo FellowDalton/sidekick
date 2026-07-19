@@ -53,10 +53,14 @@ function render(){
   arc.style.strokeDasharray=C; arc.style.strokeDashoffset=C;
   requestAnimationFrame(()=>requestAnimationFrame(()=>{ arc.style.strokeDashoffset=C*(1-ov.pct); }));
 
-  // active tasks + prepared plans
+  // active tasks + prepared plans (open only — done sub-tasks ride along in
+  // ACTIVE so children stay visible while their parent is open, but this
+  // static view renders flat cards, so exclude them; missing status = open,
+  // for feeds written before the status field existed)
   const host = document.getElementById("active");
-  document.getElementById("activeCount").textContent = ACTIVE.length + " open";
-  ACTIVE.forEach(t=>{
+  const openTasks = ACTIVE.filter(t => t.status !== "done");
+  document.getElementById("activeCount").textContent = openTasks.length + " open";
+  openTasks.forEach(t=>{
     const card = document.createElement("article");
     card.className = "task-card" + (t.plan ? "" : " noplan");
     const hue = CAT_HUE[t.category] || "var(--line)";

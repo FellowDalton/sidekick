@@ -171,6 +171,8 @@ def create_task(title, category, *, from_=None, shared=False, parent=None, list_
     so a plain create produces the same file as before. `parent` (a task id) links
     a sub-task to its parent (nested sub-tasks spec) — the parent must exist and
     be open."""
+    if parent is not None and list_ is not None:
+        raise ValueError("sub-tasks cannot be assigned to a list")
     if parent is not None:
         try:
             pfm, _ = read_note(task_path(parent))

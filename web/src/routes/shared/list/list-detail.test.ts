@@ -86,6 +86,26 @@ describe("list detail view", () => {
     expect(createTask).toHaveBeenCalledWith("Buy candles", "chore", true, "groceries");
   });
 
+  it("renders breakdown children in creation order, not newest-first", async () => {
+    // feed order is creation order: c1 (step 1) before c2 (step 2) — the tree
+    // must preserve that under the parent even though roots sort newest-first
+    vi.mocked(getFeed).mockResolvedValue({
+      events: [],
+      lists: [{ id: "groceries", name: "Groceries", created: "2026-07-19T00:00:00Z" }],
+      active: [
+        { id: "p", task: "Plan the party", category: "chore", sat_for_hours: 5, plan: null, shared: true, status: "open", list: "groceries" },
+        { id: "c1", task: "Step one", category: "chore", sat_for_hours: 2, plan: null, shared: true, parent: "p", status: "open" },
+        { id: "c2", task: "Step two", category: "chore", sat_for_hours: 1, plan: null, shared: true, parent: "p", status: "open" }
+      ]
+    } as any);
+    render(Page);
+    const parentRow = (await screen.findByText("Plan the party")).closest("li")!;
+    const children = parentRow.querySelectorAll(".children > li");
+    expect(children.length).toBe(2);
+    expect(children[0].textContent).toContain("Step one");
+    expect(children[1].textContent).toContain("Step two");
+  });
+
   it("shows list-not-found for an unknown id", async () => {
     vi.mocked(getFeed).mockResolvedValue({ events: [], lists: [], active: [] } as any);
     render(Page);   // param mock still says "groceries", which now doesn't exist

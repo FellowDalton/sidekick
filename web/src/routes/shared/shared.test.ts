@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent } from "@testing-library/svelte";
 import type { Feed } from "$lib/types";
 
 vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
@@ -23,8 +23,6 @@ vi.mock("$lib/api", () => ({
 import Page from "./+page.svelte";
 import { getFeed, createList, deleteList } from "$lib/api";
 import { goto } from "$app/navigation";
-
-afterEach(() => vi.useRealTimers());
 
 beforeEach(() => {
   vi.clearAllMocks();

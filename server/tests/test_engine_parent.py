@@ -1,4 +1,6 @@
 """Engine: parent/child task linkage (nested sub-tasks spec, 2026-07-19)."""
+import json
+
 import pytest
 import sidekick
 
@@ -72,3 +74,19 @@ def test_done_task_without_parent_stays_out_of_feed(vault):
     tid = sidekick.create_task("Solo task", "chore")
     sidekick.complete(tid)
     assert sidekick.read_active() == []
+
+
+def test_regenerate_writes_done_child_status_into_data_js(vault):
+    """The contract the static renderer (sidekick-render.js) consumes: a done
+    sub-task rides along in the active array with status "done" while its
+    parent is open."""
+    parent_id = sidekick.create_task("Plan the party", "chore")
+    child_id = sidekick.create_task("Book the venue", "chore", parent=parent_id)
+    sidekick.complete(child_id)
+    sidekick.regenerate()
+    raw = (vault / "sidekick-data.js").read_text(encoding="utf-8")
+    js = raw.split("window.SIDEKICK = ", 1)[1].rstrip().rstrip(";")
+    payload = json.loads(js)
+    by_id = {a["id"]: a for a in payload["active"]}
+    assert by_id[child_id]["status"] == "done"
+    assert by_id[parent_id]["status"] == "open"

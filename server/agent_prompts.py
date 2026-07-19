@@ -84,7 +84,7 @@ Do exactly this:
 1. Read tasks/{task_id}.md for context.
 2. Split the work into 2-5 concrete sub-tasks, each doable in one sitting.
 3. Create each one with:
-   python3 sidekick.py new "<sub-task title>" --category {category} --from sidekick{shared_flag}
+   python3 sidekick.py new "<sub-task title>" --category {category} --from sidekick{shared_flag} --parent {task_id}
    {inherit}
    Note the id every command prints ("created <id>").
 4. Set a SHORT plan on the parent linking the children: write

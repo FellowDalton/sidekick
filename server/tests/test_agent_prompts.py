@@ -138,3 +138,9 @@ def test_breakdown_prompt_fences_malicious_title():
     assert real_ground_rules in p, "Real ground rules block missing"
     assert p.index(closing_delim) < p.index(real_ground_rules), \
         "Real ground rules must come after the closing delimiter"
+
+
+def test_breakdown_prompt_links_children_with_parent_flag():
+    p = agent_prompts.breakdown_prompt(task_id="20260719-plan-the-party", title="Plan the party",
+                                       category="chore", shared=True)
+    assert "--parent 20260719-plan-the-party" in p

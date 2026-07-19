@@ -90,20 +90,22 @@
   }
 
   async function saveDescription(id: string) {
-    if (!feed) return;
+    if (!feed || pending.has(id)) return;
     const text = editText[id] ?? "";
     const trimmed = text.trim();
-    const prev = feed;
+    const prevDesc = feed.active.find(t => t.id === id)?.description ?? null;
     const next = new Set(editing); next.delete(id); editing = next;
     feed = {
-      ...prev,
-      active: prev.active.map(t => t.id === id ? { ...t, description: trimmed || null } : t)
+      ...feed,
+      active: feed.active.map(t => t.id === id ? { ...t, description: trimmed || null } : t)
     };  // optimistic — whitespace-only clears to null, server handles the actual clear
     try {
       await setTaskDescription(id, text);
       await load();                                       // reconcile
     } catch (e) {
-      feed = prev;                                         // roll back
+      // targeted rollback: restore only this task's description in the CURRENT
+      // feed, so an unrelated optimistic mutation that landed in between isn't reverted
+      feed = feed ? { ...feed, active: feed.active.map(t => t.id === id ? { ...t, description: prevDesc } : t) } : feed;
       error = e instanceof Error ? e.message : "couldn't save — try again";
     }
   }

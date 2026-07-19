@@ -75,3 +75,47 @@ describe("Ask Sidekick", () => {
     expect(screen.getByText("done — plan set")).toBeInTheDocument();
   });
 });
+
+describe("Dashboard nested sub-tasks", () => {
+  const nested: Feed = {
+    events: [],
+    active: [
+      { id: "p", task: "Plan the party", category: "chore", sat_for_hours: 5,
+        plan: { summary: "Broken into 2 sub-tasks", steps: [{ text: "Book the venue — [[c1]]" }, { text: "Order the cake — [[c2]]" }] },
+        status: "open" },
+      { id: "c1", task: "Book the venue", category: "chore", sat_for_hours: 2, plan: null, parent: "p", status: "open" },
+      { id: "c2", task: "Order the cake", category: "chore", sat_for_hours: null, plan: null, parent: "p", status: "done", completed_at: "2026-07-19T10:00:00Z" }
+    ]
+  };
+
+  it("nests child cards inside the parent card, not as top-level cards", () => {
+    const { container } = render(Dashboard, { props: { feed: nested } });
+    const parentCard = screen.getByText("Plan the party").closest("article")!;
+    expect(parentCard.querySelector(".children")).toBeTruthy();
+    // children live inside the parent's card
+    expect(parentCard.textContent).toContain("Book the venue");
+    // and only the parent is a top-level card
+    const section = parentCard.parentElement!;
+    expect(section.querySelectorAll(":scope > article").length).toBe(1);
+  });
+
+  it("renders a done child struck-through without buttons", () => {
+    render(Dashboard, { props: { feed: nested } });
+    const done = screen.getByText("Order the cake").closest("article")!;
+    expect(done.classList.contains("done-card")).toBe(true);
+    expect(done.querySelector("button")).toBeNull();
+  });
+
+  it("counts only open tasks in the header and nudges when all children are done", () => {
+    const allDone: Feed = {
+      events: [],
+      active: [
+        { id: "p", task: "Plan the party", category: "chore", sat_for_hours: 5, plan: null, status: "open" },
+        { id: "c1", task: "Book the venue", category: "chore", sat_for_hours: null, plan: null, parent: "p", status: "done", completed_at: "2026-07-19T10:00:00Z" }
+      ]
+    };
+    render(Dashboard, { props: { feed: allDone } });
+    expect(screen.getByText("1 open")).toBeInTheDocument();
+    expect(screen.getByText("1/1 done — finish it?")).toBeInTheDocument();
+  });
+});

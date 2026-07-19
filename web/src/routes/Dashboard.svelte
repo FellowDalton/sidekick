@@ -3,6 +3,7 @@
   import type { AgentJob } from "$lib/api";
   import { hero, branchVMs, recentLog, catHue, dur } from "$lib/game";
   import { computeStats, WEEKDAY_NAMES } from "$lib/stats";
+  import { buildTree, doneCount, showNudge, type TreeNode } from "$lib/tree";
 
   let { feed, onComplete = (_id: string) => {}, pending = new Set<string>(),
         onAgent = (_id: string) => {}, agentJobs = {} }:
@@ -15,6 +16,8 @@
   const stats = $derived(computeStats(feed.events));
   const wkMax = $derived(Math.max(1, ...stats.byWeekday));
   const R = 52, C = 2 * Math.PI * R;
+  const tree = $derived(buildTree(feed.active));
+  const openCount = $derived(feed.active.filter(t => t.status !== "done").length);
 
   function safeHref(h: string | undefined): string | null {
     return h && /^(https?|tel|mailto):/i.test(h) ? h : null;
@@ -47,44 +50,58 @@
   </div>
 </section>
 
-<div class="head"><h2>In front of you</h2><span class="count">{feed.active.length} open</span><span class="rule"></span></div>
+<div class="head"><h2>In front of you</h2><span class="count">{openCount} open</span><span class="rule"></span></div>
 <section class="section">
-  {#each feed.active as t (t.id)}
-    <article class="task-card" class:noplan={!t.plan}>
+  {#snippet taskNode(node: TreeNode)}
+    {@const t = node.task}
+    <article class="task-card" class:noplan={!t.plan} class:done-card={t.status === "done"}>
       <div class="tc-head">
         <h3 class="tc-name">{t.task}</h3>
         <span class="tc-meta">
           <span class="cat" style="--cl:{catHue(t.category)}">{t.category}</span>
-          <span class="sat">{dur(t.sat_for_hours)}</span>
+          {#if t.status !== "done"}<span class="sat">{dur(t.sat_for_hours)}</span>{/if}
         </span>
       </div>
-      {#if t.plan}
-        <div class="plan-sum"><span class="prep">Prepared</span>{t.plan.summary}</div>
-        <ol class="steps">
-          {#each t.plan.steps as s, i}
-            {@const href = safeHref(s.href)}
-            <li class:next={i === 0}>
-              {#if href}<a {href} target={href.startsWith("tel:") ? undefined : "_blank"} rel="noopener">{s.text}</a>{:else}{s.text}{/if}
-            </li>
-          {/each}
-        </ol>
+      {#if t.status === "done"}
+        <div class="muted done-note">✓ done</div>
       {:else}
-        <div class="noplan-msg muted">No plan yet — ask the orchestrator to clear the first step.</div>
-      {/if}
-      <button class="btn btn-done" aria-label="Done" aria-busy={pending.has(t.id)} disabled={pending.has(t.id)} onclick={() => onComplete(t.id)}>
-        {pending.has(t.id) ? "Completing…" : "Done"}
-      </button>
-      <div class="tc-agent">
-        <button class="btn" disabled={isAgentBusy(t.id)} onclick={() => onAgent(t.id)}
-                aria-label={"Ask Sidekick about " + t.task}>
-          {isAgentBusy(t.id) ? "Sidekick working…" : "Ask Sidekick"}
-        </button>
-        {#if agentJobs[t.id]}
-          <span class="chip chip-{agentJobs[t.id].status}">{chipText(agentJobs[t.id])}</span>
+        {#if t.plan}
+          <div class="plan-sum"><span class="prep">Prepared</span>{t.plan.summary}</div>
+          <ol class="steps">
+            {#each t.plan.steps as s, i}
+              {@const href = safeHref(s.href)}
+              <li class:next={i === 0}>
+                {#if href}<a {href} target={href.startsWith("tel:") ? undefined : "_blank"} rel="noopener">{s.text}</a>{:else}{s.text}{/if}
+              </li>
+            {/each}
+          </ol>
+        {:else if node.children.length === 0}
+          <div class="noplan-msg muted">No plan yet — ask the orchestrator to clear the first step.</div>
         {/if}
-      </div>
+        {#if showNudge(node)}
+          <span class="nudge">{doneCount(node).done}/{doneCount(node).total} done — finish it?</span>
+        {/if}
+        <button class="btn btn-done" aria-label="Done" aria-busy={pending.has(t.id)} disabled={pending.has(t.id)} onclick={() => onComplete(t.id)}>
+          {pending.has(t.id) ? "Completing…" : "Done"}
+        </button>
+        <div class="tc-agent">
+          <button class="btn" disabled={isAgentBusy(t.id)} onclick={() => onAgent(t.id)}
+                  aria-label={"Ask Sidekick about " + t.task}>
+            {isAgentBusy(t.id) ? "Sidekick working…" : "Ask Sidekick"}
+          </button>
+          {#if agentJobs[t.id]}
+            <span class="chip chip-{agentJobs[t.id].status}">{chipText(agentJobs[t.id])}</span>
+          {/if}
+        </div>
+      {/if}
+      {#if node.children.length}
+        <div class="children">
+          {#each node.children as c (c.task.id)}{@render taskNode(c)}{/each}
+        </div>
+      {/if}
     </article>
-  {/each}
+  {/snippet}
+  {#each tree as n (n.task.id)}{@render taskNode(n)}{/each}
 </section>
 
 <div class="head"><h2>Skill branches</h2><span class="rule"></span></div>
@@ -134,4 +151,9 @@
   .chip-queued, .chip-running { animation: chip-pulse 1.5s ease-in-out infinite; }
   .chip-failed { border-color: rgba(220, 60, 60, 0.6); }
   @keyframes chip-pulse { 50% { opacity: 0.45; } }
+  .children { margin-top: 10px; padding-left: 14px; border-left: 2px solid rgba(128, 128, 128, 0.25); }
+  .done-card .tc-name { text-decoration: line-through; opacity: 0.55; }
+  .done-note { font-size: 13px; }
+  .nudge { display: inline-block; font-size: 13px; margin: 6px 0; padding: 2px 10px;
+           border-radius: 999px; border: 1px solid rgba(120, 200, 120, 0.5); }
 </style>

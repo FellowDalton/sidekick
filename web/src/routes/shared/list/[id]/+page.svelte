@@ -106,6 +106,9 @@
       // targeted rollback: restore only this task's description in the CURRENT
       // feed, so an unrelated optimistic mutation that landed in between isn't reverted
       feed = feed ? { ...feed, active: feed.active.map(t => t.id === id ? { ...t, description: prevDesc } : t) } : feed;
+      // re-enter editing with the user's typed text still in place — a failed
+      // save must not discard what they wrote
+      editing = new Set(editing).add(id);
       error = e instanceof Error ? e.message : "couldn't save — try again";
     }
   }

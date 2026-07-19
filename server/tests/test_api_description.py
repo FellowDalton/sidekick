@@ -74,6 +74,21 @@ def test_shared_describe_404_on_personal_task(roles_client):
     assert r.status_code == 404            # indistinguishable from a missing task
 
 
+def test_describe_with_horizontal_rule_does_not_poison_vault(client):
+    """A '---' line typed as a markdown horizontal rule in the description must not
+    be mistaken for the frontmatter delimiter — a substring-based split used to
+    corrupt the note file, crashing /feed for every user until it was hand-edited."""
+    entry = _mk(client)
+    r = client.post(f"/tasks/{entry['id']}/description", headers=AUTH,
+                    json={"description": "first\n---\nsecond"})
+    assert r.status_code == 200
+    assert r.json()["description"] == "first\n---\nsecond"
+    r = client.get("/feed", headers=AUTH)
+    assert r.status_code == 200
+    by_id = {a["id"]: a for a in r.json()["active"]}
+    assert by_id[entry["id"]]["description"] == "first\n---\nsecond"
+
+
 def test_shared_can_describe_shared_task(roles_client):
     tid = roles_client.post("/tasks", json={"title": "Buy milk", "category": "chore"},
                            headers=SHARED).json()["id"]

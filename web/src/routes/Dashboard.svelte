@@ -6,10 +6,11 @@
   import { buildTree, doneCount, showNudge, type TreeNode } from "$lib/tree";
 
   let { feed, onComplete = (_id: string) => {}, pending = new Set<string>(),
-        onAgent = (_id: string) => {}, agentJobs = {}, onDescribe = (_id: string, _text: string) => {} }:
+        onAgent = (_id: string) => {}, agentJobs = {},
+        onDescribe = async (_id: string, _text: string) => true }:
     { feed: Feed; onComplete?: (id: string) => void; pending?: Set<string>;
       onAgent?: (id: string) => void; agentJobs?: Record<string, AgentJob>;
-      onDescribe?: (id: string, text: string) => void } = $props();
+      onDescribe?: (id: string, text: string) => Promise<boolean> } = $props();
 
   // ── description display/edit (cards), keyed by task id ──
   let expanded = $state(new Set<string>());
@@ -31,10 +32,14 @@
     const next = new Set(editing); next.delete(id); editing = next;
   }
 
-  function saveDescription(id: string) {
+  async function saveDescription(id: string) {
     const text = editText[id] ?? "";
-    const next = new Set(editing); next.delete(id); editing = next;
-    onDescribe(id, text);
+    const ok = await onDescribe(id, text);
+    // only leave editing on success — a failed save keeps the editor open with
+    // the user's typed text still in editText, instead of discarding it
+    if (ok) {
+      const next = new Set(editing); next.delete(id); editing = next;
+    }
   }
 
   const h = $derived(hero(feed));

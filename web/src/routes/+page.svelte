@@ -38,8 +38,11 @@
     }
   }
 
-  async function onDescribe(id: string, text: string) {
-    if (!feed) return;
+  // Returns whether the save succeeded — Dashboard.svelte awaits this and only
+  // clears its editing state on success, so a failed save leaves the user's
+  // typed text in place instead of discarding it.
+  async function onDescribe(id: string, text: string): Promise<boolean> {
+    if (!feed) return false;
     const trimmed = text.trim();
     const prevDesc = feed.active.find(t => t.id === id)?.description ?? null;
     feed = {
@@ -49,11 +52,13 @@
     try {
       await setTaskDescription(id, text);
       await load();                                                    // reconcile
+      return true;
     } catch (e) {
       // targeted rollback: restore only this task's description in the CURRENT
       // feed, so an unrelated optimistic mutation that landed in between isn't reverted
       feed = feed ? { ...feed, active: feed.active.map(t => t.id === id ? { ...t, description: prevDesc } : t) } : feed;
       error = e instanceof Error ? e.message : "couldn't save — try again";
+      return false;
     }
   }
 

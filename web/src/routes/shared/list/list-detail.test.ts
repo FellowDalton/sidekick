@@ -181,7 +181,7 @@ describe("list detail — task descriptions", () => {
     await waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));   // reconcile after save resolves
   });
 
-  it("rolls back the description edit on failure", async () => {
+  it("keeps the editor open with the typed text when the save fails", async () => {
     vi.mocked(getFeed).mockResolvedValue({
       ...feed,
       active: [{ ...feed.active[0], description: "Old details" }]
@@ -193,12 +193,14 @@ describe("list detail — task descriptions", () => {
 
     await fireEvent.click(screen.getByLabelText("Details for Plan the party"));
     await fireEvent.click(screen.getByRole("button", { name: "Edit" }));
-    const textarea = screen.getByLabelText("Edit details for Plan the party");
+    const textarea = screen.getByLabelText("Edit details for Plan the party") as HTMLTextAreaElement;
     await fireEvent.input(textarea, { target: { value: "New details" } });
     await fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(screen.getByText("couldn't reach the host")).toBeInTheDocument());
-    expect(screen.getByLabelText("Details for Plan the party").textContent).toContain("Old details");
+    // the editor stays open — the user's typed text was never discarded
+    expect(screen.getByLabelText("Edit details for Plan the party")).toHaveValue("New details");
+    expect(screen.queryByLabelText("Details for Plan the party")).toBeNull();
   });
 
   it("does not render a description on a done row", async () => {

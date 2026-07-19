@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/svelte";
+import { render, screen, fireEvent, waitFor } from "@testing-library/svelte";
 import Dashboard from "./Dashboard.svelte";
 import type { Feed } from "$lib/types";
 
@@ -94,8 +94,8 @@ describe("Dashboard descriptions", () => {
     expect(container.querySelector(".desc-text.expanded, [aria-label='Details for Replace fan'].expanded")).toBeTruthy();
   });
 
-  it("calls onDescribe with the edited text on Save", async () => {
-    const onDescribe = vi.fn();
+  it("calls onDescribe with the edited text on Save and closes the editor on success", async () => {
+    const onDescribe = vi.fn().mockResolvedValue(true);
     render(Dashboard, { props: { feed: withDesc, onDescribe } });
     await fireEvent.click(screen.getByLabelText("Details for Replace fan"));
     await fireEvent.click(screen.getByText("Edit"));
@@ -103,6 +103,20 @@ describe("Dashboard descriptions", () => {
     await fireEvent.input(textarea, { target: { value: "Updated details here." } });
     await fireEvent.click(screen.getByText("Save"));
     expect(onDescribe).toHaveBeenCalledWith("t1", "Updated details here.");
+    await waitFor(() => expect(screen.queryByLabelText("Edit details for Replace fan")).toBeNull());
+  });
+
+  it("keeps the editor open with the typed text when the save fails", async () => {
+    const onDescribe = vi.fn().mockResolvedValue(false);
+    render(Dashboard, { props: { feed: withDesc, onDescribe } });
+    await fireEvent.click(screen.getByLabelText("Details for Replace fan"));
+    await fireEvent.click(screen.getByText("Edit"));
+    const textarea = screen.getByLabelText("Edit details for Replace fan");
+    await fireEvent.input(textarea, { target: { value: "Updated details here." } });
+    await fireEvent.click(screen.getByText("Save"));
+    await waitFor(() => expect(onDescribe).toHaveBeenCalledWith("t1", "Updated details here."));
+    // the editor stays open — the user's typed text was never discarded
+    expect(screen.getByLabelText("Edit details for Replace fan")).toHaveValue("Updated details here.");
   });
 
   it("does not render a description on a done child card", () => {

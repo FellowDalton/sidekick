@@ -87,11 +87,17 @@ def hours_since(iso):
 def read_note(path):
     """Return (frontmatter_dict, body_str)."""
     text = open(path, encoding="utf-8").read()
-    if text.startswith("---"):
-        parts = text.split("---", 2)              # ['', fm, body] — body keeps any later '---'
-        if len(parts) == 3:
-            fm = yaml.safe_load(parts[1]) or {}
-            return (fm if isinstance(fm, dict) else {}), parts[2].lstrip("\n")
+    if text.startswith("---\n"):
+        # line-anchored close: a "---" line at column 0 — never a substring match,
+        # so free-typed user text containing "---" (markdown rules) can't break parsing
+        end = text.find("\n---\n", 4)
+        if end != -1:
+            fm = yaml.safe_load(text[4:end + 1]) or {}
+            body = text[end + 5:]
+            return (fm if isinstance(fm, dict) else {}), body.lstrip("\n")
+        if text.endswith("\n---"):
+            fm = yaml.safe_load(text[4:-3]) or {}
+            return (fm if isinstance(fm, dict) else {}), ""
     return {}, text
 
 def write_note(path, fm, body):
@@ -171,7 +177,8 @@ def create_task(title, category, *, from_=None, shared=False, parent=None, list_
     shared-list frontmatter fields (spec sub-project 2) — written only when set,
     so a plain create produces the same file as before. `parent` (a task id) links
     a sub-task to its parent (nested sub-tasks spec) — the parent must exist and
-    be open."""
+    be open. `description` is an optional free-text frontmatter field (task-descriptions
+    spec) — stripped, and omitted entirely when blank."""
     if parent is not None and list_ is not None:
         raise ValueError("sub-tasks cannot be assigned to a list")
     if parent is not None:

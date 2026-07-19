@@ -52,3 +52,24 @@ def test_feed_exposes_description(vault):
     by_id = {a["id"]: a for a in sidekick.read_active()}
     assert by_id[with_d]["description"] == "Matte white"
     assert by_id[without]["description"] is None
+
+
+def test_description_with_horizontal_rule_does_not_poison_vault(vault):
+    """A '---' line typed as a markdown horizontal rule in the description must not
+    be mistaken for the frontmatter delimiter — read_note used to split on the
+    substring '---' anywhere in the file, which corrupted the note and crashed
+    read_active() for every task once it happened."""
+    tid = sidekick.create_task("Buy paint", "errand")
+    sidekick.set_description(tid, "first\n---\nsecond")
+    fm, _ = sidekick.read_note(sidekick.task_path(tid))
+    assert fm["description"] == "first\n---\nsecond"
+    by_id = {a["id"]: a for a in sidekick.read_active()}
+    assert by_id[tid]["description"] == "first\n---\nsecond"
+
+
+def test_description_with_inline_triple_dash_round_trips(vault):
+    """An inline '---' (no surrounding newlines) must never be treated as a
+    delimiter and must never be split mid-word."""
+    tid = sidekick.create_task("Buy paint", "errand", description="wait---ok")
+    fm, _ = sidekick.read_note(sidekick.task_path(tid))
+    assert fm["description"] == "wait---ok"

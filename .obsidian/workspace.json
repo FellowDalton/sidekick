@@ -1,0 +1,204 @@
+{
+  "main": {
+    "id": "192e3647d7028499",
+    "type": "split",
+    "children": [
+      {
+        "id": "23d16c8bd9aee097",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "2a247448c289e0cc",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "tasks/20260616-book-the-kids-dentist-check-up.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "20260616-book-the-kids-dentist-check-up"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "8961ec708f22e8fa",
+    "type": "split",
+    "children": [
+      {
+        "id": "056b2364c6998314",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "7df79cc8e346f9bc",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "79e37052a3a15489",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "3a26c2f185be486e",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "37d71f935eed337c",
+    "type": "split",
+    "children": [
+      {
+        "id": "fe6377edc27a2d68",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "382fc879a68b0fc5",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "tasks/20260616-book-the-kids-dentist-check-up.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for 20260616-book-the-kids-dentist-check-up"
+            }
+          },
+          {
+            "id": "70874b4d7c8e3db8",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "tasks/20260616-book-the-kids-dentist-check-up.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from 20260616-book-the-kids-dentist-check-up"
+            }
+          },
+          {
+            "id": "cb932b5abc830bc9",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "54485a86ae10cc4d",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "16d8eb084e234e70",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "tasks/20260616-book-the-kids-dentist-check-up.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of 20260616-book-the-kids-dentist-check-up"
+            }
+          },
+          {
+            "id": "0cd2969b04c4de08",
+            "type": "leaf",
+            "state": {
+              "type": "git-view",
+              "state": {},
+              "icon": "git-pull-request",
+              "title": "Source Control"
+            }
+          }
+        ],
+        "currentTab": 5
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false,
+      "obsidian-git:Open Git source control": false
+    }
+  },
+  "active": "2a247448c289e0cc",
+  "lastOpenFiles": [
+    "tasks/20260708-test-from-phone.md",
+    "tasks/20260615-renew-your-passport.md",
+    "tasks/20260613-sort-the-car-insurance-renewal.md",
+    "tasks/20260609-replace-the-bathroom-extractor-fan.md"
+  ]
+}

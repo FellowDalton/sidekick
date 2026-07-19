@@ -22,3 +22,6 @@ chrome-extension/sidekick-render.js
 # python bytecode
 __pycache__/
 *.pyc
+
+# Obsidian app state (machine-local)
+.obsidian/

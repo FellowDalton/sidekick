@@ -15,6 +15,7 @@ export interface ActiveTask {
   status?: "open" | "done"; // "done" = completed child still shown under its open parent
   completed_at?: string | null; // set on done children only
   list?: string | null;   // named-list membership — id of the list
+  description?: string | null; // free-text detail captured after creation
 }
 
 export interface TaskList { id: string; name: string; created: string; }

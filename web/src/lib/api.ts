@@ -37,14 +37,23 @@ export async function getMe(): Promise<Identity> {
   return handle(await fetch(`${base()}/api/me`, { headers: headers() }));
 }
 
-export async function createTask(title: string, category: Category, shared = false, list?: string): Promise<ActiveTask> {
+export async function createTask(title: string, category: Category, shared = false, list?: string, description?: string): Promise<ActiveTask> {
   const body: Record<string, unknown> = { title, category };
   if (shared) body.shared = true;
   if (list) body.list = list;
+  if (description) body.description = description;
   return handle(await fetch(`${base()}/api/tasks`, {
     method: "POST",
     headers: headers({ "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }),
     body: JSON.stringify(body)
+  }));
+}
+
+export async function setTaskDescription(id: string, description: string): Promise<ActiveTask> {
+  return handle(await fetch(`${base()}/api/tasks/${encodeURIComponent(id)}/description`, {
+    method: "POST",
+    headers: headers({ "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() }),
+    body: JSON.stringify({ description })
   }));
 }
 

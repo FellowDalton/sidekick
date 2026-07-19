@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getFeed, getMe, createTask, completeTask, getVapidPublicKey, subscribePush, startAgentJob, getAgentJob, createList, deleteList, ApiError } from "./api";
+import { getFeed, getMe, createTask, completeTask, getVapidPublicKey, subscribePush, startAgentJob, getAgentJob, createList, deleteList, setTaskDescription, ApiError } from "./api";
 import { settings } from "./settings";
 
 function mockFetch(status: number, body: unknown) {
@@ -191,5 +191,37 @@ describe("named lists api", () => {
     const [, opts] = f.mock.calls[0];
     expect(JSON.parse(opts.body)).toEqual(
       { title: "Buy milk", category: "errand", shared: true, list: "groceries" });
+  });
+});
+
+describe("task description api", () => {
+  it("createTask includes description only when given", async () => {
+    const f = mockFetch(201, { id: "t", task: "Buy milk" });
+    vi.stubGlobal("fetch", f);
+    await createTask("Buy milk", "chore", true, undefined, "details");
+    const [, opts] = f.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual(
+      { title: "Buy milk", category: "chore", shared: true, description: "details" });
+  });
+
+  it("createTask omits description from the body by default (backward compatible)", async () => {
+    const f = mockFetch(201, { id: "x", task: "Buy milk", category: "errand", sat_for_hours: 0, plan: null });
+    vi.stubGlobal("fetch", f);
+    await createTask("Buy milk", "errand");
+    const [, opts] = f.mock.calls[0];
+    expect(JSON.parse(opts.body)).toEqual({ title: "Buy milk", category: "errand" });
+  });
+
+  it("setTaskDescription POSTs to /api/tasks/{id}/description with an Idempotency-Key", async () => {
+    const f = mockFetch(200, { id: "t1", task: "Buy milk", category: "errand", sat_for_hours: 0, plan: null, description: "x" });
+    vi.stubGlobal("fetch", f);
+    const res = await setTaskDescription("t1", "x");
+    expect(res.description).toBe("x");
+    const [url, opts] = f.mock.calls[0];
+    expect(url).toContain("/api/tasks/t1/description");
+    expect(opts.method).toBe("POST");
+    expect(JSON.parse(opts.body)).toEqual({ description: "x" });
+    expect(typeof opts.headers["Idempotency-Key"]).toBe("string");
+    expect(opts.headers["Idempotency-Key"].length).toBeGreaterThan(0);
   });
 });

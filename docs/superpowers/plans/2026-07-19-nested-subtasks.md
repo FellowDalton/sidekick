@@ -64,14 +64,14 @@ def test_new_without_parent_writes_no_parent_field(vault):
 
 
 def test_new_with_missing_parent_fails(vault):
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         sidekick.create_task("Orphan", "chore", parent="20990101-nope")
 
 
 def test_new_with_done_parent_fails(vault):
     parent_id = sidekick.create_task("Old task", "chore")
     sidekick.complete(parent_id)
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         sidekick.create_task("Too late", "chore", parent=parent_id)
 ```
 
@@ -95,9 +95,9 @@ def create_task(title, category, *, from_=None, shared=False, parent=None):
         try:
             pfm, _ = read_note(task_path(parent))
         except FileNotFoundError:
-            sys.exit(f"parent task {parent} not found")
+            raise ValueError(f"parent task {parent} not found")
         if pfm.get("status", "open") != "open":
-            sys.exit(f"parent task {parent} is not open")
+            raise ValueError(f"parent task {parent} is not open")
     os.makedirs(TASKS, exist_ok=True)
     task_id = dt.datetime.now().strftime("%Y%m%d") + "-" + slug(title)
     n, base = 2, task_id
@@ -122,12 +122,28 @@ In `main()`, add the flag to the `new` parser (next to `--shared`):
                     help="parent task id — links this as a sub-task (parent must be open)")
 ```
 
-and thread it through the dispatch:
+and thread it through the dispatch, converting engine `ValueError`s to a clean CLI exit (wrap the whole `if a.cmd == …` chain in `main()`):
 
 ```python
-    elif a.cmd == "new":
-        create_task(a.title, a.category, from_=a.from_, shared=a.shared, parent=a.parent); regenerate()
+    try:
+        if a.cmd == "regenerate":
+            regenerate()
+        elif a.cmd == "wiki":
+            wiki_index()
+        elif a.cmd == "new":
+            create_task(a.title, a.category, from_=a.from_, shared=a.shared, parent=a.parent); regenerate()
+        elif a.cmd == "set-plan":
+            raw = open(a.file, encoding="utf-8").read() if a.file else sys.stdin.read()
+            plan = json.loads(raw)
+            set_plan(a.id, plan["summary"], plan["steps"]); regenerate()
+        elif a.cmd == "complete":
+            complete(a.id, note=a.note, via=a.via); regenerate()
+    except ValueError as e:
+        sys.exit(str(e))
 ```
+
+(Engine validation raises `ValueError` so the HTTP server can catch it and map to 4xx —
+`sys.exit` would crash a server worker. The CLI converts it to a clean exit here.)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -665,7 +681,12 @@ git commit -m "web: dashboard renders nested sub-task tree with done rows and fi
 
 ---
 
-### Task 6: Shared list renders the tree
+### Task 6: MOVED — do not execute here
+
+> **2026-07-19 amendment:** named lists (spec `2026-07-19-named-lists-design.md`) turn the
+> shared page into a list grid, and the tree now renders in the list DETAIL view instead.
+> This task's content was absorbed into `docs/superpowers/plans/2026-07-19-named-lists.md`
+> (Task 5 there). Skip straight to Task 7. The steps below are retained for reference only.
 
 **Files:**
 - Modify: `web/src/routes/shared/+page.svelte`

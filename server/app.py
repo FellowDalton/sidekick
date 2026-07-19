@@ -75,6 +75,18 @@ def create_app(config=None, agent_jobs=None):
     def _read_json(request_body):
         return request_body if isinstance(request_body, dict) else {}
 
+    def _clean_description(value):
+        """None | stripped string (may be empty). Raises 400 on wrong type/size."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise HTTPException(status_code=400, detail="description must be a string")
+        value = value.strip()
+        if len(value) > 4000:
+            raise HTTPException(status_code=400,
+                                detail="description must be at most 4000 characters")
+        return value
+
     @app.get("/push/vapid-public-key")
     def get_vapid_public_key(authorization: str = Header(default="")):
         require_auth(authorization)
@@ -151,6 +163,7 @@ def create_app(config=None, agent_jobs=None):
         list_id = data.get("list")
         if list_id is not None and not isinstance(list_id, str):
             raise HTTPException(status_code=400, detail="list must be a string id")
+        description = _clean_description(data.get("description"))
 
         def run():
             with vault_lock(config.vault):
@@ -158,7 +171,8 @@ def create_app(config=None, agent_jobs=None):
                         l["id"] == list_id for l in sidekick.read_lists()):
                     raise HTTPException(status_code=400, detail=f"no such list: {list_id}")
                 tid = sidekick.create_task(title, category,
-                                           from_=ident["name"], shared=shared, list_=list_id)
+                                           from_=ident["name"], shared=shared, list_=list_id,
+                                           description=description or None)
                 sidekick.regenerate()
                 git_sync.commit_and_push(config.vault, f"api: new {tid}",
                                          push=config.push, remote=config.remote)
@@ -263,6 +277,47 @@ def create_app(config=None, agent_jobs=None):
                 git_sync.commit_and_push(config.vault, f"api: complete {task_id}",
                                          push=config.push, remote=config.remote)
             return 200, result
+
+        scope = f"{ident['name']}:{request.url.path}"
+        return _idem_replay_or_run(scope, idempotency_key, run)
+
+    @app.post("/tasks/{task_id}/description")
+    async def post_description(task_id: str, request: Request,
+                               authorization: str = Header(default=""),
+                               idempotency_key: str = Header(default="")):
+        ident = require_auth(authorization)
+        try:
+            data = _read_json(await request.json())
+        except Exception:
+            data = {}
+        if "description" not in data:
+            raise HTTPException(status_code=400, detail="description is required")
+        description = _clean_description(data.get("description"))
+        if description is None:
+            raise HTTPException(status_code=400, detail="description must be a string")
+
+        def run():
+            with vault_lock(config.vault):
+                if ident["role"] == "shared":
+                    # a personal task must be indistinguishable from a missing one
+                    try:
+                        fm, _ = sidekick.read_note(sidekick.task_path(task_id))
+                    except FileNotFoundError:
+                        raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
+                    if not fm.get("shared"):
+                        raise HTTPException(status_code=404, detail=f"no such task: {task_id}")
+                try:
+                    sidekick.set_description(task_id, description)
+                except ValueError as e:
+                    msg = str(e)
+                    if msg.startswith("no such task"):
+                        raise HTTPException(status_code=404, detail=msg)
+                    raise HTTPException(status_code=409, detail=msg)
+                sidekick.regenerate()
+                git_sync.commit_and_push(config.vault, f"api: describe {task_id}",
+                                         push=config.push, remote=config.remote)
+                entry = next((a for a in sidekick.read_active() if a["id"] == task_id), None)
+            return 200, entry
 
         scope = f"{ident['name']}:{request.url.path}"
         return _idem_replay_or_run(scope, idempotency_key, run)

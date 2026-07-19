@@ -67,8 +67,10 @@ def create_app(config=None, agent_jobs=None):
         if ident["role"] == "shared":
             # her page doesn't need the game feed; personal data never leaves the host
             return {"events": [],
-                    "active": [a for a in sidekick.read_active() if a["shared"]]}
-        return {"events": sidekick.read_ledger(), "active": sidekick.read_active()}
+                    "active": [a for a in sidekick.read_active() if a["shared"]],
+                    "lists": sidekick.read_lists()}
+        return {"events": sidekick.read_ledger(), "active": sidekick.read_active(),
+                "lists": sidekick.read_lists()}
 
     def _read_json(request_body):
         return request_body if isinstance(request_body, dict) else {}
@@ -146,11 +148,17 @@ def create_app(config=None, agent_jobs=None):
         # role `shared` is forced onto the shared list; role `full` may opt in.
         # `from` is ALWAYS the token identity — never client-supplied (spec SP2).
         shared = True if ident["role"] == "shared" else bool(data.get("shared"))
+        list_id = data.get("list")
+        if list_id is not None and not isinstance(list_id, str):
+            raise HTTPException(status_code=400, detail="list must be a string id")
 
         def run():
             with vault_lock(config.vault):
+                if list_id is not None and not any(
+                        l["id"] == list_id for l in sidekick.read_lists()):
+                    raise HTTPException(status_code=400, detail=f"no such list: {list_id}")
                 tid = sidekick.create_task(title, category,
-                                           from_=ident["name"], shared=shared)
+                                           from_=ident["name"], shared=shared, list_=list_id)
                 sidekick.regenerate()
                 git_sync.commit_and_push(config.vault, f"api: new {tid}",
                                          push=config.push, remote=config.remote)
@@ -159,6 +167,53 @@ def create_app(config=None, agent_jobs=None):
 
         scope = f"{ident['name']}:{request.url.path}"
         return _idem_replay_or_run(scope, idempotency_key, run)
+
+    @app.post("/lists")
+    async def post_list(request: Request,
+                        authorization: str = Header(default=""),
+                        idempotency_key: str = Header(default="")):
+        ident = require_auth(authorization)
+        try:
+            data = _read_json(await request.json())
+        except Exception:
+            data = {}
+        name = data.get("name")
+        if not name or not isinstance(name, str) or not (1 <= len(name.strip()) <= 60):
+            raise HTTPException(status_code=400, detail="name is required (1-60 characters)")
+        name = name.strip()
+
+        def run():
+            with vault_lock(config.vault):
+                list_id = sidekick._list_slug(name)
+                if any(l["id"] == list_id for l in sidekick.read_lists()):
+                    raise HTTPException(status_code=409, detail=f"list {list_id} already exists")
+                try:
+                    entry = sidekick.list_new(name)
+                except ValueError as e:          # reserved name (or race on the check above)
+                    raise HTTPException(status_code=400, detail=str(e))
+                sidekick.regenerate()
+                git_sync.commit_and_push(config.vault, f"api: new list {entry['id']}",
+                                         push=config.push, remote=config.remote)
+            return 201, entry
+
+        scope = f"{ident['name']}:{request.url.path}"
+        return _idem_replay_or_run(scope, idempotency_key, run)
+
+    @app.delete("/lists/{list_id}")
+    def delete_list(list_id: str, authorization: str = Header(default="")):
+        require_auth(authorization)
+        with vault_lock(config.vault):
+            if not any(l["id"] == list_id for l in sidekick.read_lists()):
+                # the built-in To-dos list is not a resource — it 404s like any unknown id
+                raise HTTPException(status_code=404, detail=f"no such list: {list_id}")
+            try:
+                sidekick.list_delete(list_id)
+            except ValueError as e:              # still has open tasks
+                raise HTTPException(status_code=409, detail=str(e))
+            sidekick.regenerate()
+            git_sync.commit_and_push(config.vault, f"api: delete list {list_id}",
+                                     push=config.push, remote=config.remote)
+        return {"ok": True}
 
     @app.post("/tasks/{task_id}/complete")
     async def post_complete(task_id: str, request: Request,

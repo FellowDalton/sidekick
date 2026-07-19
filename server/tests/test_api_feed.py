@@ -17,7 +17,7 @@ def test_feed_returns_events_and_active(client, app_config):
     r = client.get("/feed", headers=AUTH)
     assert r.status_code == 200
     payload = r.json()
-    assert set(payload.keys()) == {"events", "active"}
+    assert set(payload.keys()) == {"events", "active", "lists"}
     assert any(a["task"] == "Sweep the garage" for a in payload["active"])
     assert payload["events"] == []
 

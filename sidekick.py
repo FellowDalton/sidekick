@@ -102,9 +102,21 @@ def write_note(path, fm, body):
     os.replace(tmp, path)
 
 def slug(s):
-    s = re.sub(r"[^\w\s-]", "", s.lower(), flags=re.ASCII).strip()
+    """Generate a slug from a string, preserving unicode characters.
+    Used for task IDs so that titles like "Ring til tandlægen" produce IDs with
+    unicode intact."""
+    s = re.sub(r"[^\w\s-]", "", s.lower()).strip()
     s = re.sub(r"[\s_-]+", "-", s)
     return s[:50] or "task"
+
+def _list_slug(name):
+    """ASCII-only slug for list ids — they appear in URLs (/shared/list/<id>).
+    Non-ASCII characters are stripped before slugging."""
+    if not name:
+        return "list"
+    s = slug(name.encode("ascii", "ignore").decode("ascii"))
+    s = re.sub(r"-{2,}", "-", s).strip("-")
+    return s[:50] or "list"
 
 def task_path(task_id):
     return os.path.join(TASKS, task_id + ".md")
@@ -131,7 +143,7 @@ def list_new(name):
     name = (name or "").strip()
     if not name:
         raise ValueError("list name is required")
-    list_id = slug(name)
+    list_id = _list_slug(name)
     if list_id in _RESERVED_LIST_IDS:
         raise ValueError("that name is reserved for the built-in To-dos list")
     lists = read_lists()

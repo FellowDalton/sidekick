@@ -63,3 +63,9 @@ def test_feed_exposes_list_field(vault):
     by_id = {a["id"]: a for a in sidekick.read_active()}
     assert by_id[with_list]["list"] == "groceries"
     assert by_id[without]["list"] is None
+
+
+def test_task_slug_keeps_unicode(vault):
+    """Task IDs should preserve unicode characters (e.g., Danish æøå), not strip them."""
+    tid = sidekick.create_task("Ring til tandlægen", "phone")
+    assert "tandlægen" in tid

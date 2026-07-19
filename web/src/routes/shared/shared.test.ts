@@ -10,6 +10,8 @@ vi.mock("$lib/api", () => ({
   completeTask: vi.fn(async () => ({
     id: "new", status: "done", completed_at: "T", sat_for_hours: 1, already_done: false
   })),
+  createList: vi.fn(),
+  deleteList: vi.fn(),
   startAgentJob: vi.fn(),
   getAgentJob: vi.fn(),
   ApiError: class extends Error {
@@ -18,144 +20,72 @@ vi.mock("$lib/api", () => ({
   }
 }));
 
-import SharedPage from "./+page.svelte";
-import { getFeed, createTask, completeTask, startAgentJob, getAgentJob, ApiError } from "$lib/api";
-
-const feed: Feed = {
-  events: [],
-  active: [
-    { id: "old", task: "Old shared", category: "chore", sat_for_hours: 50, plan: null, from: "dalton", shared: true },
-    { id: "personal", task: "Personal thing", category: "admin", sat_for_hours: 10, plan: null, from: "dalton", shared: false },
-    { id: "new", task: "New shared", category: "chore", sat_for_hours: 5, plan: null, from: "wife", shared: true }
-  ]
-};
+import Page from "./+page.svelte";
+import { getFeed, createList, deleteList } from "$lib/api";
+import { goto } from "$app/navigation";
 
 afterEach(() => vi.useRealTimers());
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getFeed).mockResolvedValue(feed);
 });
 
-describe("Shared list", () => {
-  it("shows only shared tasks, newest first", async () => {
-    render(SharedPage);
-    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
-    expect(screen.queryByText("Personal thing")).toBeNull();
-    const items = screen.getAllByRole("listitem");
-    expect(items[0]).toHaveTextContent("New shared");
-    expect(items[1]).toHaveTextContent("Old shared");
+describe("shared page — list grid", () => {
+  const gridFeed = {
+    events: [],
+    lists: [{ id: "groceries", name: "Groceries", created: "2026-07-19T00:00:00Z" },
+            { id: "packing", name: "Packing", created: "2026-07-19T00:00:00Z" }],
+    active: [
+      { id: "t1", task: "Buy milk", category: "errand", sat_for_hours: 1, plan: null, shared: true, status: "open", list: "groceries" },
+      { id: "t2", task: "Call plumber", category: "phone", sat_for_hours: 2, plan: null, shared: true, status: "open" },
+      { id: "t2c", task: "Find number", category: "phone", sat_for_hours: 1, plan: null, shared: true, status: "open", parent: "t2" }
+    ]
+  };
+
+  it("renders To-dos first, then registry lists, with open root counts", async () => {
+    vi.mocked(getFeed).mockResolvedValue(gridFeed as any);
+    render(Page);
+    const cards = await screen.findAllByRole("link", { name: /open list/i });
+    expect(cards.map(c => c.getAttribute("href"))).toEqual(
+      ["/shared/list/todos", "/shared/list/groceries", "/shared/list/packing"]);
   });
 
-  it("adds a task from the box as a shared chore and reloads", async () => {
-    render(SharedPage);
-    await waitFor(() => expect(getFeed).toHaveBeenCalled());
-    await fireEvent.input(screen.getByLabelText(/new shared task/i), { target: { value: "Buy milk" } });
-    await fireEvent.click(screen.getByRole("button", { name: /add/i }));
-    await waitFor(() => expect(createTask).toHaveBeenCalledWith("Buy milk", "chore", true));
-    await waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));
+  it("previews root tasks only — children never appear on a card", async () => {
+    vi.mocked(getFeed).mockResolvedValue(gridFeed as any);
+    render(Page);
+    await screen.findByText("Call plumber");        // t2 is a To-dos root
+    expect(screen.queryByText("Find number")).toBeNull();   // child of t2, hidden on grid
   });
 
-  it("ticking a checkbox completes the task and removes it", async () => {
-    const feedAfterComplete: Feed = {
+  it("shows +N more when a list has more than 5 open roots", async () => {
+    const many = Array.from({ length: 7 }, (_, i) => (
+      { id: `g${i}`, task: `Item ${i}`, category: "errand", sat_for_hours: 1,
+        plan: null, shared: true, status: "open", list: "groceries" }));
+    vi.mocked(getFeed).mockResolvedValue({ ...gridFeed, active: many } as any);
+    render(Page);
+    expect(await screen.findByText("+2 more")).toBeInTheDocument();
+  });
+
+  it("creates a list and navigates into it", async () => {
+    vi.mocked(getFeed).mockResolvedValue({ events: [], lists: [], active: [] } as any);
+    vi.mocked(createList).mockResolvedValue(
+      { id: "ferie", name: "Ferie", created: "2026-07-19T00:00:00Z" } as any);
+    render(Page);
+    await fireEvent.click(await screen.findByRole("button", { name: /new list/i }));
+    await fireEvent.input(screen.getByLabelText("List name"), { target: { value: "Ferie" } });
+    await fireEvent.submit(screen.getByLabelText("List name").closest("form")!);
+    expect(createList).toHaveBeenCalledWith("Ferie");
+    expect(goto).toHaveBeenCalledWith("/shared/list/ferie");
+  });
+
+  it("offers Delete only on an empty non-default list", async () => {
+    vi.mocked(getFeed).mockResolvedValue({
       events: [],
-      active: [
-        { id: "old", task: "Old shared", category: "chore", sat_for_hours: 50, plan: null, from: "dalton", shared: true },
-        { id: "personal", task: "Personal thing", category: "admin", sat_for_hours: 10, plan: null, from: "dalton", shared: false }
-      ]
-    };
-
-    // On first call (mount), return original feed; on second call (after tick), return feed without the completed item
-    vi.mocked(getFeed).mockResolvedValueOnce(feed).mockResolvedValueOnce(feedAfterComplete);
-
-    render(SharedPage);
-    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
-
-    await fireEvent.click(screen.getByRole("checkbox", { name: /complete new shared/i }));
-    await waitFor(() => expect(completeTask).toHaveBeenCalledWith("new", expect.any(String)));
-    expect(screen.queryByText("New shared")).toBeNull();
-  });
-
-  it("after a successful tick, reconciles feed (fetches new items from other person)", async () => {
-    const feedAfterComplete: Feed = {
-      events: [],
-      active: [
-        { id: "old", task: "Old shared", category: "chore", sat_for_hours: 50, plan: null, from: "dalton", shared: true },
-        { id: "personal", task: "Personal thing", category: "admin", sat_for_hours: 10, plan: null, from: "dalton", shared: false },
-        { id: "wife-added", task: "Wife just added this", category: "chore", sat_for_hours: 2, plan: null, from: "wife", shared: true }
-      ]
-    };
-
-    // On first call (mount), return original feed; on second call (after tick), return feed with new item from other person
-    vi.mocked(getFeed).mockResolvedValueOnce(feed).mockResolvedValueOnce(feedAfterComplete);
-
-    render(SharedPage);
-    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
-    expect(screen.queryByText("Wife just added this")).toBeNull();
-
-    await fireEvent.click(screen.getByRole("checkbox", { name: /complete new shared/i }));
-    await waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));
-    expect(screen.queryByText("New shared")).toBeNull();
-    expect(screen.getByText("Wife just added this")).toBeInTheDocument();
-  });
-
-  it("break it down starts a breakdown job and shows the chip", async () => {
-    vi.mocked(startAgentJob).mockResolvedValue({
-      id: "j1", task_id: "new", action: "breakdown", status: "queued",
-      summary: null, error: null, log_tail: null,
-      created_at: "T", started_at: null, finished_at: null
+      lists: [{ id: "old", name: "Old", created: "2026-07-19T00:00:00Z" }],
+      active: []
     } as any);
-    render(SharedPage);
-    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
-    await fireEvent.click(screen.getByRole("button", { name: /break down new shared/i }));
-    await waitFor(() => expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown"));
-    expect(screen.getByText("queued")).toBeInTheDocument();
-  });
-
-  it("shows a done chip that doesn't overpromise immediate sub-tasks", async () => {
-    vi.mocked(startAgentJob).mockResolvedValue({
-      id: "j1", task_id: "new", action: "breakdown", status: "queued",
-      summary: null, error: null, log_tail: null,
-      created_at: "T", started_at: null, finished_at: null
-    } as any);
-    vi.mocked(getAgentJob).mockResolvedValue({
-      id: "j1", task_id: "new", action: "breakdown", status: "done",
-      summary: "3 sub-tasks created", error: null, log_tail: null,
-      created_at: "T", started_at: "T", finished_at: "T"
-    } as any);
-
-    render(SharedPage);
-    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
-
-    vi.useFakeTimers();
-    await fireEvent.click(screen.getByRole("button", { name: /break down new shared/i }));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown");
-
-    await vi.advanceTimersByTimeAsync(5000);   // poll 1 → done
-    vi.useRealTimers();
-    await waitFor(() =>
-      expect(screen.getByText("done — sub-tasks arrive in a few minutes")).toBeInTheDocument());
-  });
-
-  it("shows a job-lost chip as failed (job lost)", async () => {
-    vi.mocked(startAgentJob).mockResolvedValue({
-      id: "j1", task_id: "new", action: "breakdown", status: "queued",
-      summary: null, error: null, log_tail: null,
-      created_at: "T", started_at: null, finished_at: null
-    } as any);
-    vi.mocked(getAgentJob).mockRejectedValue(new ApiError(404, "not found"));
-
-    render(SharedPage);
-    await waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
-
-    vi.useFakeTimers();
-    await fireEvent.click(screen.getByRole("button", { name: /break down new shared/i }));
-    await vi.advanceTimersByTimeAsync(0);
-    expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown");
-
-    await vi.advanceTimersByTimeAsync(5000);   // poll 1 → 404, marked job lost
-    vi.useRealTimers();
-    await waitFor(() => expect(screen.getByText("failed (job lost)")).toBeInTheDocument());
+    render(Page);
+    expect(await screen.findByRole("button", { name: "Delete Old" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete To-dos" })).toBeNull();
   });
 });

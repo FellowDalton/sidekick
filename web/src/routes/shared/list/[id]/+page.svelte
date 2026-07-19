@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { getFeed, createTask, completeTask, startAgentJob, getAgentJob, ApiError, type AgentJob } from "$lib/api";
+  import { getFeed, createTask, completeTask, setTaskDescription, startAgentJob, getAgentJob, ApiError, type AgentJob } from "$lib/api";
   import { hasToken } from "$lib/settings";
   import { buildTree, doneCount, showNudge, type TreeNode } from "$lib/tree";
   import type { Feed } from "$lib/types";
@@ -16,6 +16,15 @@
   let pending = $state(new Set<string>());
   let agentJobs = $state<Record<string, AgentJob>>({});
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  // ── details capture (add box) ──
+  let showDetails = $state(false);
+  let description = $state("");
+
+  // ── description display/edit (rows), keyed by task id ──
+  let expanded = $state(new Set<string>());
+  let editing = $state(new Set<string>());
+  let editText = $state<Record<string, string>>({});
 
   const listName = $derived(
     listId === "todos" ? "To-dos" : (feed?.lists ?? []).find(l => l.id === listId)?.name ?? null);
@@ -44,15 +53,58 @@
     e.preventDefault();
     if (!title.trim() || busy) return;
     busy = true; error = "";
+    const list = listId === "todos" ? undefined : listId;
+    const details = description.trim();
     try {
-      await createTask(title.trim(), "chore", true,
-                       listId === "todos" ? undefined : listId);  // fixed category: the box has no picker
+      // fixed category: the box has no picker; description only when non-empty
+      if (details) {
+        await createTask(title.trim(), "chore", true, list, details);
+      } else {
+        await createTask(title.trim(), "chore", true, list);
+      }
       title = "";
+      description = "";
+      showDetails = false;
       await load();
     } catch (err) {
       error = err instanceof Error ? err.message : "couldn't add — try again";
     } finally {
       busy = false;
+    }
+  }
+
+  // ── description display/edit ──
+  function toggleExpanded(id: string) {
+    const next = new Set(expanded);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    expanded = next;
+  }
+
+  function startEdit(id: string, current: string | null | undefined) {
+    editText = { ...editText, [id]: current ?? "" };
+    editing = new Set(editing).add(id);
+  }
+
+  function cancelEdit(id: string) {
+    const next = new Set(editing); next.delete(id); editing = next;
+  }
+
+  async function saveDescription(id: string) {
+    if (!feed) return;
+    const text = editText[id] ?? "";
+    const trimmed = text.trim();
+    const prev = feed;
+    const next = new Set(editing); next.delete(id); editing = next;
+    feed = {
+      ...prev,
+      active: prev.active.map(t => t.id === id ? { ...t, description: trimmed || null } : t)
+    };  // optimistic — whitespace-only clears to null, server handles the actual clear
+    try {
+      await setTaskDescription(id, text);
+      await load();                                       // reconcile
+    } catch (e) {
+      feed = prev;                                         // roll back
+      error = e instanceof Error ? e.message : "couldn't save — try again";
     }
   }
 
@@ -129,9 +181,18 @@
 {:else}
   <h1 class="tc-name" style="font-size:26px;margin:8px 0 18px">{listName ?? "…"}</h1>
 
-  <form class="add-row" onsubmit={add}>
-    <input type="text" bind:value={title} placeholder="Add to the list…" aria-label="New task" />
-    <button class="btn btn-primary" type="submit" disabled={busy}>{busy ? "Adding…" : "Add"}</button>
+  <form class="add-box" onsubmit={add}>
+    <div class="add-row">
+      <input type="text" bind:value={title} placeholder="Add to the list…" aria-label="New task" />
+      <button class="btn btn-primary" type="submit" disabled={busy}>{busy ? "Adding…" : "Add"}</button>
+    </div>
+    <button type="button" class="details-toggle" onclick={() => showDetails = !showDetails}>
+      {showDetails ? "− details" : "+ details"}
+    </button>
+    {#if showDetails}
+      <textarea class="details-textarea" bind:value={description} aria-label="Details"
+                rows="3" placeholder="Add details…"></textarea>
+    {/if}
   </form>
 
   {#if error}
@@ -160,6 +221,29 @@
             {/if}
           </label>
           {#if t.status !== "done"}
+            {#if t.description}
+              {@const isExpanded = expanded.has(t.id)}
+              {@const isEditing = editing.has(t.id)}
+              <div class="desc">
+                {#if isEditing}
+                  <textarea class="desc-textarea" bind:value={editText[t.id]} rows="3"
+                            aria-label={"Edit details for " + t.task}></textarea>
+                  <div class="desc-edit-actions">
+                    <button type="button" class="btn btn-mini" onclick={() => saveDescription(t.id)}>Save</button>
+                    <button type="button" class="btn btn-mini" onclick={() => cancelEdit(t.id)}>Cancel</button>
+                  </div>
+                {:else}
+                  <button type="button" class="desc-text {isExpanded ? 'expanded' : ''}"
+                          aria-label={"Details for " + t.task}
+                          onclick={() => toggleExpanded(t.id)}>
+                    {t.description}
+                  </button>
+                  {#if isExpanded}
+                    <button type="button" class="btn btn-mini" onclick={() => startEdit(t.id, t.description)}>Edit</button>
+                  {/if}
+                {/if}
+              </div>
+            {/if}
             <div class="row-agent">
               <button class="btn btn-mini" disabled={!!agentJobs[t.id] && jobActive(agentJobs[t.id])}
                       onclick={() => breakItDown(t.id)} aria-label={"Break down " + t.task}>
@@ -188,12 +272,33 @@
 
 <style>
   .back { display: inline-block; font-size: 14px; text-decoration: none; }
-  .add-row { display: flex; gap: 8px; margin-bottom: 18px; }
+  .add-box { margin-bottom: 18px; }
+  .add-row { display: flex; gap: 8px; }
   .add-row input[type="text"] {
     flex: 1; min-width: 0; padding: 10px 12px; border-radius: 10px;
     border: 1px solid rgba(128, 128, 128, 0.35); background: transparent;
     color: inherit; font-size: 16px;   /* ≥16px prevents iOS focus zoom */
   }
+  .details-toggle {
+    display: block; margin-top: 6px; padding: 2px 0; border: none; background: none;
+    color: inherit; opacity: 0.65; font-size: 13px; cursor: pointer;
+  }
+  .details-toggle:hover { opacity: 1; }
+  .details-textarea, .desc-textarea {
+    display: block; width: 100%; box-sizing: border-box; margin-top: 6px;
+    padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(128, 128, 128, 0.35);
+    background: transparent; color: inherit; font: inherit; font-size: 15px; resize: none;
+    field-sizing: content;             /* auto-grow to fit content, where supported */
+    max-height: 160px; overflow-y: auto;  /* fallback cap for browsers without field-sizing */
+  }
+  .desc { margin: 6px 0 0 34px; }
+  .desc-text {
+    margin: 0; width: 100%; padding: 0; border: none; background: none; color: inherit;
+    font: inherit; font-size: 14px; text-align: left; opacity: 0.8; cursor: pointer;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .desc-text.expanded { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+  .desc-edit-actions { display: flex; gap: 8px; margin-top: 6px; }
   .list { list-style: none; padding: 0; margin: 0; }
   .list li { padding: 12px 0; border-bottom: 1px solid rgba(128, 128, 128, 0.2); }
   .list label { display: flex; align-items: center; gap: 12px; font-size: 17px; flex-wrap: wrap; }

@@ -11,6 +11,7 @@ vi.mock("$lib/api", () => ({
   completeTask: vi.fn(async () => ({
     id: "new", status: "done", completed_at: "T", sat_for_hours: 1, already_done: false
   })),
+  setTaskDescription: vi.fn(),
   startAgentJob: vi.fn(),
   getAgentJob: vi.fn(),
   ApiError: class extends Error {
@@ -20,7 +21,7 @@ vi.mock("$lib/api", () => ({
 }));
 
 import Page from "./[id]/+page.svelte";
-import { getFeed, createTask, completeTask, startAgentJob, getAgentJob, ApiError } from "$lib/api";
+import { getFeed, createTask, completeTask, setTaskDescription, startAgentJob, getAgentJob, ApiError } from "$lib/api";
 import { goto } from "$app/navigation";
 
 afterEach(() => vi.useRealTimers());
@@ -110,6 +111,105 @@ describe("list detail view", () => {
     vi.mocked(getFeed).mockResolvedValue({ events: [], lists: [], active: [] } as any);
     render(Page);   // param mock still says "groceries", which now doesn't exist
     expect(await screen.findByText(/list not found/i)).toBeInTheDocument();
+  });
+});
+
+describe("list detail — task descriptions", () => {
+  const feed = {
+    events: [],
+    lists: [{ id: "groceries", name: "Groceries", created: "2026-07-19T00:00:00Z" }],
+    active: [
+      { id: "p", task: "Plan the party", category: "chore", sat_for_hours: 5, plan: null, shared: true, status: "open", list: "groceries" },
+      { id: "c2", task: "Order the cake", category: "chore", sat_for_hours: null, plan: null, shared: true, parent: "p", status: "done", completed_at: "2026-07-19T10:00:00Z" }
+    ]
+  };
+
+  it("adds a task with details from the expanded textarea", async () => {
+    vi.mocked(getFeed).mockResolvedValue(feed as any);
+    vi.mocked(createTask).mockResolvedValue({ id: "n" } as any);
+    render(Page);
+    await screen.findByText("Plan the party");
+
+    await fireEvent.click(screen.getByRole("button", { name: "+ details" }));
+    await fireEvent.input(screen.getByLabelText("Details"), { target: { value: "  the details  " } });
+    await fireEvent.input(screen.getByLabelText("New task"), { target: { value: "Buy candles" } });
+    await fireEvent.submit(screen.getByLabelText("New task").closest("form")!);
+
+    expect(createTask).toHaveBeenCalledWith("Buy candles", "chore", true, "groceries", "the details");
+    await waitFor(() => expect(screen.queryByLabelText("Details")).toBeNull());   // collapsed after submit
+  });
+
+  it("shows a clamped description that expands on tap", async () => {
+    vi.mocked(getFeed).mockResolvedValue({
+      ...feed,
+      active: [{ ...feed.active[0], description: "Some long details about the party plan." }]
+    } as any);
+    render(Page);
+    await screen.findByText("Plan the party");
+
+    const desc = screen.getByLabelText("Details for Plan the party");
+    expect(desc.textContent).toContain("Some long details about the party plan.");
+    expect(desc.className).not.toContain("expanded");
+
+    await fireEvent.click(desc);
+    expect(screen.getByLabelText("Details for Plan the party").className).toContain("expanded");
+  });
+
+  it("edits a description and saves optimistically", async () => {
+    vi.mocked(getFeed).mockResolvedValue({
+      ...feed,
+      active: [{ ...feed.active[0], description: "Old details" }]
+    } as any);
+    let resolveSave!: (v: unknown) => void;
+    const savePromise = new Promise((res) => { resolveSave = res; });
+    vi.mocked(setTaskDescription).mockReturnValue(savePromise as any);
+
+    render(Page);
+    await screen.findByText("Plan the party");
+
+    await fireEvent.click(screen.getByLabelText("Details for Plan the party"));
+    await fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const textarea = screen.getByLabelText("Edit details for Plan the party");
+    await fireEvent.input(textarea, { target: { value: "New details" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(setTaskDescription).toHaveBeenCalledWith("p", "New details");
+    expect(screen.getByLabelText("Details for Plan the party").textContent).toContain("New details");
+    expect(getFeed).toHaveBeenCalledTimes(1);   // no reconcile yet
+
+    resolveSave({ id: "p" });
+    await waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));   // reconcile after save resolves
+  });
+
+  it("rolls back the description edit on failure", async () => {
+    vi.mocked(getFeed).mockResolvedValue({
+      ...feed,
+      active: [{ ...feed.active[0], description: "Old details" }]
+    } as any);
+    vi.mocked(setTaskDescription).mockRejectedValue(new Error("couldn't reach the host"));
+
+    render(Page);
+    await screen.findByText("Plan the party");
+
+    await fireEvent.click(screen.getByLabelText("Details for Plan the party"));
+    await fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const textarea = screen.getByLabelText("Edit details for Plan the party");
+    await fireEvent.input(textarea, { target: { value: "New details" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(screen.getByText("couldn't reach the host")).toBeInTheDocument());
+    expect(screen.getByLabelText("Details for Plan the party").textContent).toContain("Old details");
+  });
+
+  it("does not render a description on a done row", async () => {
+    vi.mocked(getFeed).mockResolvedValue({
+      ...feed,
+      active: [feed.active[0], { ...feed.active[1], description: "Cake details" }]
+    } as any);
+    render(Page);
+    await screen.findByText("Plan the party");
+
+    expect(screen.queryByLabelText("Details for Order the cake")).toBeNull();
   });
 });
 

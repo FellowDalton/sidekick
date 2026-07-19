@@ -20,7 +20,7 @@ vi.mock("$lib/api", () => ({
 }));
 
 import Page from "./[id]/+page.svelte";
-import { getFeed, createTask, completeTask, startAgentJob, getAgentJob } from "$lib/api";
+import { getFeed, createTask, completeTask, startAgentJob, getAgentJob, ApiError } from "$lib/api";
 import { goto } from "$app/navigation";
 
 afterEach(() => vi.useRealTimers());
@@ -91,4 +91,119 @@ describe("list detail view", () => {
     render(Page);   // param mock still says "groceries", which now doesn't exist
     expect(await screen.findByText(/list not found/i)).toBeInTheDocument();
   });
+});
+
+// Behaviors carried over (and adapted) from the old flat shared page's
+// shared.test.ts (git show 70cb84c:web/src/routes/shared/shared.test.ts),
+// which the detail view replaced. Route param mock is fixed to "groceries",
+// so every fixture root below lives in that list.
+describe("list detail — optimistic complete, rollback, breakdown polling", () => {
+  const feed: Feed = {
+    events: [],
+    lists: [{ id: "groceries", name: "Groceries", created: "2026-07-19T00:00:00Z" }],
+    active: [
+      { id: "new", task: "New shared", category: "chore", sat_for_hours: 5, plan: null, from: "wife", shared: true, status: "open", list: "groceries" }
+    ] as any
+  };
+
+  it("ticking a checkbox flips the row in place, then reconciles the feed", async () => {
+    let resolveComplete!: (v: unknown) => void;
+    const completePromise = new Promise((res) => { resolveComplete = res; });
+    vi.mocked(getFeed).mockResolvedValue(feed);
+    vi.mocked(completeTask).mockReturnValue(completePromise as any);
+
+    render(Page);
+    await screen.findByText("New shared");
+
+    await fireEvent.click(screen.getByLabelText("Complete New shared"));
+    await waitFor(() => expect(completeTask).toHaveBeenCalledWith("new", expect.any(String)));
+
+    // in-place optimistic flip — happens before completeTask (and reload) resolve
+    const box = screen.getByLabelText("New shared — done") as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(box.disabled).toBe(true);
+    expect(getFeed).toHaveBeenCalledTimes(1);   // no reconcile yet
+
+    resolveComplete({ id: "new", status: "done", completed_at: "T", sat_for_hours: 1, already_done: false });
+    await waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));   // reconcile after complete resolves
+  });
+
+  it("rolls back the optimistic flip and shows an error when complete fails", async () => {
+    vi.mocked(getFeed).mockResolvedValue(feed);
+    vi.mocked(completeTask).mockRejectedValue(new Error("couldn't reach the host"));
+
+    render(Page);
+    await screen.findByText("New shared");
+
+    await fireEvent.click(screen.getByLabelText("Complete New shared"));
+    await waitFor(() => expect(screen.getByText("couldn't reach the host")).toBeInTheDocument());
+
+    const box = screen.getByLabelText("Complete New shared") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(box.disabled).toBe(false);
+  });
+
+  it("break it down starts a job and, once the poll reports done, shows the done chip", async () => {
+    vi.mocked(getFeed).mockResolvedValue(feed);
+    vi.mocked(startAgentJob).mockResolvedValue({
+      id: "j1", task_id: "new", action: "breakdown", status: "queued",
+      summary: null, error: null, log_tail: null,
+      created_at: "T", started_at: null, finished_at: null
+    } as any);
+    vi.mocked(getAgentJob).mockResolvedValue({
+      id: "j1", task_id: "new", action: "breakdown", status: "done",
+      summary: "3 sub-tasks created", error: null, log_tail: null,
+      created_at: "T", started_at: "T", finished_at: "T"
+    } as any);
+
+    render(Page);
+    await screen.findByText("New shared");
+
+    vi.useFakeTimers();
+    await fireEvent.click(screen.getByLabelText("Break down New shared"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown");
+
+    await vi.advanceTimersByTimeAsync(5000);   // poll 1 → done
+    vi.useRealTimers();
+    await waitFor(() =>
+      expect(screen.getByText("done — sub-tasks arrive in a few minutes")).toBeInTheDocument());
+  });
+
+  it("marks the chip failed (job lost) when the poll can't find the job", async () => {
+    vi.mocked(getFeed).mockResolvedValue(feed);
+    vi.mocked(startAgentJob).mockResolvedValue({
+      id: "j1", task_id: "new", action: "breakdown", status: "queued",
+      summary: null, error: null, log_tail: null,
+      created_at: "T", started_at: null, finished_at: null
+    } as any);
+    vi.mocked(getAgentJob).mockRejectedValue(new ApiError(404, "not found"));
+
+    render(Page);
+    await screen.findByText("New shared");
+
+    vi.useFakeTimers();
+    await fireEvent.click(screen.getByLabelText("Break down New shared"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(startAgentJob).toHaveBeenCalledWith("new", "breakdown");
+
+    await vi.advanceTimersByTimeAsync(5000);   // poll 1 → 404, marked job lost
+    vi.useRealTimers();
+    await waitFor(() => expect(screen.getByText("failed (job lost)")).toBeInTheDocument());
+  });
+
+  // The old shared.test.ts also asserted the flat page's list omitted non-shared
+  // tasks — here that's "which list a shared task belongs to", covered above by
+  // "shows only this list's roots" in the main describe block. A true "todos"-route
+  // variant would need the "$app/state" route-param mock (fixed to "groceries" at
+  // module-mock hoist time) to resolve to "todos" for one test only. vi.doMock +
+  // vi.resetModules + a dynamic re-import of the page/api modules can do this in
+  // Vitest, but it reinitializes the whole module graph for that test and risks
+  // bleeding into the statically-imported `Page`/`getFeed` bindings used by every
+  // other test in this file — not worth the fragility for one extra case, and the
+  // component isn't being restructured just to make this easier to test.
+  // Untestable with the current module-level route-param mock; the "todos" root-
+  // scoping behavior is exercised indirectly by "shows only this list's roots,
+  // with children nested inside" above (a "groceries" task is included, a
+  // list-less/other task is excluded).
 });

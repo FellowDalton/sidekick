@@ -188,25 +188,47 @@ def complete(task_id, completed_at=None, note=None, via=None):
 
 # ── the assembler (read side) ────────────────────────────────────────────────
 def read_active():
+    """Open tasks, plus completed sub-tasks whose parent is still open (they render
+    as checked rows under the parent until the parent itself completes — nested
+    sub-tasks spec). Completed top-level tasks never appear."""
     active = []
     if not os.path.isdir(TASKS):
         return active
+    notes = []
     for name in sorted(os.listdir(TASKS)):
         if not name.endswith(".md"):
             continue
         fm, body = read_note(os.path.join(TASKS, name))
-        if fm.get("status", "open") != "open":
-            continue
-        title = next((l[2:].strip() for l in body.splitlines() if l.startswith("# ")), name[:-3])
-        active.append({
-            "id": name[:-3],
-            "task": title,
-            "category": fm.get("category"),
-            "sat_for_hours": hours_since(fm.get("created")),
-            "plan": fm.get("plan"),
-            "from": fm.get("from"),
-            "shared": bool(fm.get("shared")),
-        })
+        notes.append((name[:-3], fm, body))
+    open_ids = {tid for tid, fm, _ in notes if fm.get("status", "open") == "open"}
+    for tid, fm, body in notes:
+        title = next((l[2:].strip() for l in body.splitlines() if l.startswith("# ")), tid)
+        status = fm.get("status", "open")
+        if status == "open":
+            active.append({
+                "id": tid,
+                "task": title,
+                "category": fm.get("category"),
+                "sat_for_hours": hours_since(fm.get("created")),
+                "plan": fm.get("plan"),
+                "from": fm.get("from"),
+                "shared": bool(fm.get("shared")),
+                "parent": fm.get("parent"),
+                "status": "open",
+            })
+        elif status == "done" and fm.get("parent") in open_ids:
+            active.append({
+                "id": tid,
+                "task": title,
+                "category": fm.get("category"),
+                "sat_for_hours": None,
+                "plan": None,
+                "from": fm.get("from"),
+                "shared": bool(fm.get("shared")),
+                "parent": fm.get("parent"),
+                "status": "done",
+                "completed_at": fm.get("completed"),
+            })
     # longest-sitting first — the most-stalled task surfaces at the top
     active.sort(key=lambda a: (a["sat_for_hours"] is not None, a["sat_for_hours"] or 0), reverse=True)
     return active

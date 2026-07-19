@@ -165,7 +165,8 @@ def list_delete(list_id):
     print(f"deleted list {list_id}")
 
 # ── capture / orchestrator helpers (write side) ─────────────────────────────
-def create_task(title, category, *, from_=None, shared=False, parent=None, list_=None):
+def create_task(title, category, *, from_=None, shared=False, parent=None, list_=None,
+                description=None):
     """Create an open task. `from_` (dalton|wife|sidekick) and `shared` are the
     shared-list frontmatter fields (spec sub-project 2) — written only when set,
     so a plain create produces the same file as before. `parent` (a task id) links
@@ -196,6 +197,9 @@ def create_task(title, category, *, from_=None, shared=False, parent=None, list_
         fm["parent"] = parent
     if list_:
         fm["list"] = list_
+    description = (description or "").strip()
+    if description:
+        fm["description"] = description
     write_note(task_path(task_id), fm, f"# {title}\n")
     print(f"created {task_id}")
     return task_id
@@ -207,6 +211,26 @@ def set_plan(task_id, summary, steps):
     fm["plan"] = {"summary": summary, "steps": steps}
     write_note(task_path(task_id), fm, body)
     print(f"plan set on {task_id}")
+
+def set_description(task_id, text):
+    """Set, replace, or clear the task's free-text description (frontmatter field —
+    the markdown body stays the orchestrator's space). Empty/whitespace text clears.
+    ValueError on a missing or non-open task."""
+    try:
+        fm, body = read_note(task_path(task_id))
+    except FileNotFoundError:
+        raise ValueError(f"no such task: {task_id}")
+    if fm.get("status", "open") != "open":
+        raise ValueError(f"task is not open: {task_id}")
+    text = (text or "").strip()
+    if text:
+        fm["description"] = text
+        write_note(task_path(task_id), fm, body)
+        print(f"description set on {task_id}")
+    else:
+        fm.pop("description", None)
+        write_note(task_path(task_id), fm, body)
+        print(f"description cleared on {task_id}")
 
 def complete(task_id, completed_at=None, note=None, via=None):
     """Append the completion event to the ledger (its only writer), then mark the
@@ -279,6 +303,7 @@ def read_active():
                 "parent": fm.get("parent"),
                 "list": fm.get("list"),
                 "status": "open",
+                "description": fm.get("description"),
             })
         elif status == "done" and fm.get("parent") in open_ids:
             active.append({
@@ -293,6 +318,7 @@ def read_active():
                 "list": fm.get("list"),
                 "status": "done",
                 "completed_at": fm.get("completed"),
+                "description": fm.get("description"),
             })
     # longest-sitting first — the most-stalled task surfaces at the top
     active.sort(key=lambda a: (a["sat_for_hours"] is not None, a["sat_for_hours"] or 0), reverse=True)
@@ -472,7 +498,10 @@ def main():
     pn.add_argument("--parent", default=None,
                     help="parent task id — links this as a sub-task (parent must be open)")
     pn.add_argument("--list", dest="list_", default=None, help="named-list id (see list-new)")
+    pn.add_argument("--description", default=None, help="optional details shown on the task")
     pp = sub.add_parser("set-plan"); pp.add_argument("id"); pp.add_argument("--file", help="JSON {summary, steps}; omit to read stdin")
+    pd2 = sub.add_parser("set-description"); pd2.add_argument("id")
+    pd2.add_argument("--file", help="text file; omit to read stdin")
     pc = sub.add_parser("complete"); pc.add_argument("id")
     pc.add_argument("--note", help="what worked / what happened — recorded in the ledger event")
     pc.add_argument("--via", choices=["cli", "phone", "agent"], default="cli",
@@ -487,11 +516,14 @@ def main():
         elif a.cmd == "wiki":
             wiki_index()
         elif a.cmd == "new":
-            create_task(a.title, a.category, from_=a.from_, shared=a.shared, parent=a.parent, list_=a.list_); regenerate()
+            create_task(a.title, a.category, from_=a.from_, shared=a.shared, parent=a.parent, list_=a.list_, description=a.description); regenerate()
         elif a.cmd == "set-plan":
             raw = open(a.file, encoding="utf-8").read() if a.file else sys.stdin.read()
             plan = json.loads(raw)
             set_plan(a.id, plan["summary"], plan["steps"]); regenerate()
+        elif a.cmd == "set-description":
+            raw = open(a.file, encoding="utf-8").read() if a.file else sys.stdin.read()
+            set_description(a.id, raw); regenerate()
         elif a.cmd == "complete":
             complete(a.id, note=a.note, via=a.via); regenerate()
         elif a.cmd == "list-new":

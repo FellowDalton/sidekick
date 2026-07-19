@@ -6,9 +6,36 @@
   import { buildTree, doneCount, showNudge, type TreeNode } from "$lib/tree";
 
   let { feed, onComplete = (_id: string) => {}, pending = new Set<string>(),
-        onAgent = (_id: string) => {}, agentJobs = {} }:
+        onAgent = (_id: string) => {}, agentJobs = {}, onDescribe = (_id: string, _text: string) => {} }:
     { feed: Feed; onComplete?: (id: string) => void; pending?: Set<string>;
-      onAgent?: (id: string) => void; agentJobs?: Record<string, AgentJob> } = $props();
+      onAgent?: (id: string) => void; agentJobs?: Record<string, AgentJob>;
+      onDescribe?: (id: string, text: string) => void } = $props();
+
+  // ── description display/edit (cards), keyed by task id ──
+  let expanded = $state(new Set<string>());
+  let editing = $state(new Set<string>());
+  let editText = $state<Record<string, string>>({});
+
+  function toggleExpanded(id: string) {
+    const next = new Set(expanded);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    expanded = next;
+  }
+
+  function startEdit(id: string, current: string | null | undefined) {
+    editText = { ...editText, [id]: current ?? "" };
+    editing = new Set(editing).add(id);
+  }
+
+  function cancelEdit(id: string) {
+    const next = new Set(editing); next.delete(id); editing = next;
+  }
+
+  function saveDescription(id: string) {
+    const text = editText[id] ?? "";
+    const next = new Set(editing); next.delete(id); editing = next;
+    onDescribe(id, text);
+  }
 
   const h = $derived(hero(feed));
   const branches = $derived(branchVMs(feed));
@@ -65,6 +92,29 @@
       {#if t.status === "done"}
         <div class="muted done-note">✓ done</div>
       {:else}
+        {#if t.description}
+          {@const isExpanded = expanded.has(t.id)}
+          {@const isEditing = editing.has(t.id)}
+          <div class="desc">
+            {#if isEditing}
+              <textarea class="desc-textarea" bind:value={editText[t.id]} rows="3"
+                        aria-label={"Edit details for " + t.task}></textarea>
+              <div class="desc-edit-actions">
+                <button type="button" class="btn btn-mini" onclick={() => saveDescription(t.id)}>Save</button>
+                <button type="button" class="btn btn-mini" onclick={() => cancelEdit(t.id)}>Cancel</button>
+              </div>
+            {:else}
+              <button type="button" class="desc-text {isExpanded ? 'expanded' : ''}"
+                      aria-label={"Details for " + t.task}
+                      onclick={() => toggleExpanded(t.id)}>
+                {t.description}
+              </button>
+              {#if isExpanded}
+                <button type="button" class="btn btn-mini" onclick={() => startEdit(t.id, t.description)}>Edit</button>
+              {/if}
+            {/if}
+          </div>
+        {/if}
         {#if t.plan}
           <div class="plan-sum"><span class="prep">Prepared</span>{t.plan.summary}</div>
           <ol class="steps">
@@ -156,4 +206,20 @@
   .done-note { font-size: 13px; }
   .nudge { display: inline-block; font-size: 13px; margin: 6px 0; padding: 2px 10px;
            border-radius: 999px; border: 1px solid rgba(120, 200, 120, 0.5); }
+  .desc { margin: 4px 0 8px; }
+  .desc-text {
+    margin: 0; width: 100%; padding: 0; border: none; background: none; color: inherit;
+    font: inherit; font-size: 14px; text-align: left; opacity: 0.8; cursor: pointer;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .desc-text.expanded { -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
+  .desc-textarea {
+    display: block; width: 100%; box-sizing: border-box; margin-top: 6px;
+    padding: 8px 10px; border-radius: 10px; border: 1px solid rgba(128, 128, 128, 0.35);
+    background: transparent; color: inherit; font: inherit; font-size: 15px; resize: none;
+    field-sizing: content;
+    max-height: 160px; overflow-y: auto;
+  }
+  .desc-edit-actions { display: flex; gap: 8px; margin-top: 6px; }
+  .btn-mini { font-size: 13px; padding: 4px 10px; }
 </style>

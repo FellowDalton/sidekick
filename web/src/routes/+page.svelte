@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from "svelte";
   import { goto } from "$app/navigation";
   import Dashboard from "./Dashboard.svelte";
-  import { getFeed, completeTask, startAgentJob, getAgentJob, ApiError, type AgentJob } from "$lib/api";
+  import { getFeed, completeTask, setTaskDescription, startAgentJob, getAgentJob, ApiError, type AgentJob } from "$lib/api";
   import { hasToken } from "$lib/settings";
   import type { Feed } from "$lib/types";
 
@@ -35,6 +35,25 @@
       error = e instanceof Error ? e.message : "couldn't complete — try again";
     } finally {
       const next = new Set(pending); next.delete(id); pending = next;
+    }
+  }
+
+  async function onDescribe(id: string, text: string) {
+    if (!feed) return;
+    const trimmed = text.trim();
+    const prevDesc = feed.active.find(t => t.id === id)?.description ?? null;
+    feed = {
+      ...feed,
+      active: feed.active.map(t => t.id === id ? { ...t, description: trimmed || null } : t)
+    };  // optimistic — whitespace-only clears to null, server handles the actual clear
+    try {
+      await setTaskDescription(id, text);
+      await load();                                                    // reconcile
+    } catch (e) {
+      // targeted rollback: restore only this task's description in the CURRENT
+      // feed, so an unrelated optimistic mutation that landed in between isn't reverted
+      feed = feed ? { ...feed, active: feed.active.map(t => t.id === id ? { ...t, description: prevDesc } : t) } : feed;
+      error = e instanceof Error ? e.message : "couldn't save — try again";
     }
   }
 
@@ -99,7 +118,7 @@
   <p class="msg-err">{error}</p>
   <button class="btn" onclick={load}>Retry</button>
 {:else if feed}
-  <Dashboard {feed} {onComplete} {pending} {onAgent} {agentJobs} />
+  <Dashboard {feed} {onComplete} {pending} {onAgent} {agentJobs} {onDescribe} />
 {:else}
   <p class="muted">Loading…</p>
 {/if}

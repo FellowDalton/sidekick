@@ -76,6 +76,50 @@ describe("Ask Sidekick", () => {
   });
 });
 
+describe("Dashboard descriptions", () => {
+  const withDesc: Feed = {
+    events: [],
+    active: [
+      { id: "t1", task: "Replace fan", category: "chore", sat_for_hours: 120, plan: null,
+        description: "Get three quotes from local electricians before booking anyone." }
+    ]
+  };
+
+  it("renders a clamped description on a card and expands on tap", async () => {
+    const { container } = render(Dashboard, { props: { feed: withDesc } });
+    const desc = screen.getByLabelText("Details for Replace fan");
+    expect(desc.textContent).toContain("Get three quotes");
+    expect(desc.className).not.toContain("expanded");
+    await fireEvent.click(desc);
+    expect(container.querySelector(".desc-text.expanded, [aria-label='Details for Replace fan'].expanded")).toBeTruthy();
+  });
+
+  it("calls onDescribe with the edited text on Save", async () => {
+    const onDescribe = vi.fn();
+    render(Dashboard, { props: { feed: withDesc, onDescribe } });
+    await fireEvent.click(screen.getByLabelText("Details for Replace fan"));
+    await fireEvent.click(screen.getByText("Edit"));
+    const textarea = screen.getByLabelText("Edit details for Replace fan");
+    await fireEvent.input(textarea, { target: { value: "Updated details here." } });
+    await fireEvent.click(screen.getByText("Save"));
+    expect(onDescribe).toHaveBeenCalledWith("t1", "Updated details here.");
+  });
+
+  it("does not render a description on a done child card", () => {
+    const nested: Feed = {
+      events: [],
+      active: [
+        { id: "p", task: "Plan the party", category: "chore", sat_for_hours: 5, plan: null, status: "open" },
+        { id: "c1", task: "Order the cake", category: "chore", sat_for_hours: null, plan: null,
+          parent: "p", status: "done", completed_at: "2026-07-19T10:00:00Z", description: "Chocolate, three tiers." }
+      ]
+    };
+    render(Dashboard, { props: { feed: nested } });
+    expect(screen.queryByText("Chocolate, three tiers.")).toBeNull();
+    expect(screen.queryByLabelText("Details for Order the cake")).toBeNull();
+  });
+});
+
 describe("Dashboard nested sub-tasks", () => {
   const nested: Feed = {
     events: [],

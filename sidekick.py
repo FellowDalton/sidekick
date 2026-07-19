@@ -49,12 +49,13 @@ DATA_JS   = os.path.join(VAULT, "sidekick-data.js")
 RENDER_JS = os.path.join(VAULT, "sidekick-render.js")
 WIKI       = os.path.join(VAULT, "wiki")
 WIKI_INDEX = os.path.join(WIKI, "_index.md")
+LISTS   = os.path.join(VAULT, "lists.json")
 
 def configure(vault):
     """Re-point the engine at a different vault. Recomputes every path global from
     `vault`. Used by the host server (one vault per process) and by tests (throwaway
     vaults). The engine is otherwise unchanged and stays deterministic."""
-    global VAULT, TASKS, LEDGER, DATA_JS, RENDER_JS, WIKI, WIKI_INDEX
+    global VAULT, TASKS, LEDGER, DATA_JS, RENDER_JS, WIKI, WIKI_INDEX, LISTS
     VAULT = vault
     TASKS = os.path.join(VAULT, "tasks")
     LEDGER = os.path.join(VAULT, "ledger.jsonl")
@@ -62,6 +63,7 @@ def configure(vault):
     RENDER_JS = os.path.join(VAULT, "sidekick-render.js")
     WIKI = os.path.join(VAULT, "wiki")
     WIKI_INDEX = os.path.join(WIKI, "_index.md")
+    LISTS = os.path.join(VAULT, "lists.json")
 
 # ── time helpers ─────────────────────────────────────────────────────────────
 def now_iso():
@@ -100,15 +102,58 @@ def write_note(path, fm, body):
     os.replace(tmp, path)
 
 def slug(s):
-    s = re.sub(r"[^\w\s-]", "", s.lower()).strip()
+    s = re.sub(r"[^\w\s-]", "", s.lower(), flags=re.ASCII).strip()
     s = re.sub(r"[\s_-]+", "-", s)
     return s[:50] or "task"
 
 def task_path(task_id):
     return os.path.join(TASKS, task_id + ".md")
 
+# ── named lists (code-written registry — never hand-edit lists.json) ─────────
+DEFAULT_LIST_ID = "todos"
+_RESERVED_LIST_IDS = {"todos", "to-dos"}   # the built-in To-dos list, both spellings
+
+def read_lists():
+    """Registry entries [{'id','name','created'}]. The default To-dos list is
+    implicit and never stored here."""
+    if not os.path.exists(LISTS):
+        return []
+    data = json.loads(open(LISTS, encoding="utf-8").read() or '{"lists": []}')
+    return data.get("lists", []) if isinstance(data, dict) else []
+
+def _write_lists(lists):
+    tmp = LISTS + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"lists": lists}, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, LISTS)     # atomic: a half-written registry is never read
+
+def list_new(name):
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("list name is required")
+    list_id = slug(name)
+    if list_id in _RESERVED_LIST_IDS:
+        raise ValueError("that name is reserved for the built-in To-dos list")
+    lists = read_lists()
+    if any(l["id"] == list_id for l in lists):
+        raise ValueError(f"list {list_id} already exists")
+    entry = {"id": list_id, "name": name, "created": now_iso()}
+    _write_lists(lists + [entry])
+    print(f"created list {list_id}")
+    return entry
+
+def list_delete(list_id):
+    if not any(l["id"] == list_id for l in read_lists()):
+        raise ValueError(f"no such list: {list_id}")
+    open_count = sum(1 for a in read_active()
+                     if a["status"] == "open" and a.get("list") == list_id)
+    if open_count:
+        raise ValueError(f"list {list_id} still has {open_count} open task(s)")
+    _write_lists([l for l in read_lists() if l["id"] != list_id])
+    print(f"deleted list {list_id}")
+
 # ── capture / orchestrator helpers (write side) ─────────────────────────────
-def create_task(title, category, *, from_=None, shared=False, parent=None):
+def create_task(title, category, *, from_=None, shared=False, parent=None, list_=None):
     """Create an open task. `from_` (dalton|wife|sidekick) and `shared` are the
     shared-list frontmatter fields (spec sub-project 2) — written only when set,
     so a plain create produces the same file as before. `parent` (a task id) links
@@ -121,6 +166,8 @@ def create_task(title, category, *, from_=None, shared=False, parent=None):
             raise ValueError(f"parent task {parent} not found")
         if pfm.get("status", "open") != "open":
             raise ValueError(f"parent task {parent} is not open")
+    if list_ is not None and not any(l["id"] == list_ for l in read_lists()):
+        raise ValueError(f"no such list: {list_}")
     os.makedirs(TASKS, exist_ok=True)
     task_id = dt.datetime.now().strftime("%Y%m%d") + "-" + slug(title)
     n, base = 2, task_id
@@ -133,6 +180,8 @@ def create_task(title, category, *, from_=None, shared=False, parent=None):
         fm["shared"] = True
     if parent:
         fm["parent"] = parent
+    if list_:
+        fm["list"] = list_
     write_note(task_path(task_id), fm, f"# {title}\n")
     print(f"created {task_id}")
     return task_id
@@ -214,6 +263,7 @@ def read_active():
                 "from": fm.get("from"),
                 "shared": bool(fm.get("shared")),
                 "parent": fm.get("parent"),
+                "list": fm.get("list"),
                 "status": "open",
             })
         elif status == "done" and fm.get("parent") in open_ids:
@@ -226,6 +276,7 @@ def read_active():
                 "from": fm.get("from"),
                 "shared": bool(fm.get("shared")),
                 "parent": fm.get("parent"),
+                "list": fm.get("list"),
                 "status": "done",
                 "completed_at": fm.get("completed"),
             })
@@ -319,7 +370,7 @@ def regenerate():
     """Build sidekick-data.js from open task files (+ their plans) and the ledger.
     Regenerates the DATA only — sidekick.html is static and never touched."""
     events = read_ledger()
-    payload = {"events": events, "active": read_active(), "stats": compute_stats(events)}
+    payload = {"events": events, "active": read_active(), "stats": compute_stats(events), "lists": read_lists()}
     banner = ("/* GENERATED by sidekick.py — do not hand-edit. "
               f"{now_iso()} | {len(payload['events'])} events, {len(payload['active'])} open */\n")
     js = banner + "window.SIDEKICK = " + json.dumps(payload, ensure_ascii=False, indent=2) + ";\n"
@@ -406,11 +457,14 @@ def main():
     pn.add_argument("--shared", action="store_true", help="put it on the shared list")
     pn.add_argument("--parent", default=None,
                     help="parent task id — links this as a sub-task (parent must be open)")
+    pn.add_argument("--list", dest="list_", default=None, help="named-list id (see list-new)")
     pp = sub.add_parser("set-plan"); pp.add_argument("id"); pp.add_argument("--file", help="JSON {summary, steps}; omit to read stdin")
     pc = sub.add_parser("complete"); pc.add_argument("id")
     pc.add_argument("--note", help="what worked / what happened — recorded in the ledger event")
     pc.add_argument("--via", choices=["cli", "phone", "agent"], default="cli",
                     help="which surface completed it (default: cli)")
+    pl = sub.add_parser("list-new");    pl.add_argument("name")
+    pd = sub.add_parser("list-delete"); pd.add_argument("id")
     a = ap.parse_args()
 
     try:
@@ -419,13 +473,17 @@ def main():
         elif a.cmd == "wiki":
             wiki_index()
         elif a.cmd == "new":
-            create_task(a.title, a.category, from_=a.from_, shared=a.shared, parent=a.parent); regenerate()
+            create_task(a.title, a.category, from_=a.from_, shared=a.shared, parent=a.parent, list_=a.list_); regenerate()
         elif a.cmd == "set-plan":
             raw = open(a.file, encoding="utf-8").read() if a.file else sys.stdin.read()
             plan = json.loads(raw)
             set_plan(a.id, plan["summary"], plan["steps"]); regenerate()
         elif a.cmd == "complete":
             complete(a.id, note=a.note, via=a.via); regenerate()
+        elif a.cmd == "list-new":
+            list_new(a.name); regenerate()
+        elif a.cmd == "list-delete":
+            list_delete(a.id); regenerate()
     except ValueError as e:
         sys.exit(str(e))
 

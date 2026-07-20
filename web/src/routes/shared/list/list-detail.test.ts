@@ -228,37 +228,71 @@ describe("list detail — optimistic complete, rollback, breakdown polling", () 
     ] as any
   };
 
-  it("ticking a checkbox flips the row in place, then reconciles the feed", async () => {
-    let resolveComplete!: (v: unknown) => void;
-    const completePromise = new Promise((res) => { resolveComplete = res; });
+  it("ticking flips the row at once but only sends the complete after the undo window", async () => {
+    vi.useFakeTimers();
     vi.mocked(getFeed).mockResolvedValue(feed);
-    vi.mocked(completeTask).mockReturnValue(completePromise as any);
+    vi.mocked(completeTask).mockResolvedValue(
+      { id: "new", status: "done", completed_at: "T", sat_for_hours: 1, already_done: false } as any);
 
     render(Page);
-    await screen.findByText("New shared");
+    await vi.waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
 
     await fireEvent.click(screen.getByLabelText("Complete New shared"));
-    await waitFor(() => expect(completeTask).toHaveBeenCalledWith("new", expect.any(String)));
 
-    // in-place optimistic flip — happens before completeTask (and reload) resolve
+    // immediate visual flip with an Undo affordance — but NOTHING sent yet
     const box = screen.getByLabelText("New shared — done") as HTMLInputElement;
     expect(box.checked).toBe(true);
-    expect(box.disabled).toBe(true);
-    expect(getFeed).toHaveBeenCalledTimes(1);   // no reconcile yet
+    expect(screen.getByLabelText("Undo complete New shared")).toBeInTheDocument();
+    expect(completeTask).not.toHaveBeenCalled();
 
-    resolveComplete({ id: "new", status: "done", completed_at: "T", sat_for_hours: 1, already_done: false });
-    await waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));   // reconcile after complete resolves
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(completeTask).toHaveBeenCalledWith("new", expect.any(String));
+    await vi.waitFor(() => expect(getFeed).toHaveBeenCalledTimes(2));   // reconcile after commit
   });
 
-  it("rolls back the optimistic flip and shows an error when complete fails", async () => {
+  it("undo within the window cancels the completion entirely", async () => {
+    vi.useFakeTimers();
+    vi.mocked(getFeed).mockResolvedValue(feed);
+
+    render(Page);
+    await vi.waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
+
+    await fireEvent.click(screen.getByLabelText("Complete New shared"));
+    await fireEvent.click(screen.getByLabelText("Undo complete New shared"));
+
+    // row is back to open and the server is never contacted
+    const box = screen.getByLabelText("Complete New shared") as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(completeTask).not.toHaveBeenCalled();
+  });
+
+  it("leaving the view flushes a held tick immediately", async () => {
+    vi.useFakeTimers();
+    vi.mocked(getFeed).mockResolvedValue(feed);
+    vi.mocked(completeTask).mockResolvedValue(
+      { id: "new", status: "done", completed_at: "T", sat_for_hours: 1, already_done: false } as any);
+
+    const { unmount } = render(Page);
+    await vi.waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
+
+    await fireEvent.click(screen.getByLabelText("Complete New shared"));
+    expect(completeTask).not.toHaveBeenCalled();
+    unmount();
+    expect(completeTask).toHaveBeenCalledWith("new", expect.any(String));
+  });
+
+  it("rolls back the optimistic flip and shows an error when the commit fails", async () => {
+    vi.useFakeTimers();
     vi.mocked(getFeed).mockResolvedValue(feed);
     vi.mocked(completeTask).mockRejectedValue(new Error("couldn't reach the host"));
 
     render(Page);
-    await screen.findByText("New shared");
+    await vi.waitFor(() => expect(screen.getByText("New shared")).toBeInTheDocument());
 
     await fireEvent.click(screen.getByLabelText("Complete New shared"));
-    await waitFor(() => expect(screen.getByText("couldn't reach the host")).toBeInTheDocument());
+    await vi.advanceTimersByTimeAsync(5000);
+    await vi.waitFor(() => expect(screen.getByText("couldn't reach the host")).toBeInTheDocument());
 
     const box = screen.getByLabelText("Complete New shared") as HTMLInputElement;
     expect(box.checked).toBe(false);

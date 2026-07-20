@@ -20,4 +20,24 @@ describe("Complete button", () => {
     render(Dashboard, { props: { feed, pending: new Set(["t1"]) } });
     expect(screen.getByRole("button", { name: /done/i })).toBeDisabled();
   });
+
+  it("shows Undo on a done card inside the undo window and fires onUndo", async () => {
+    const onUndo = vi.fn();
+    const doneFeed: Feed = {
+      events: [],
+      active: [{ id: "t1", task: "Pay rent", category: "admin", sat_for_hours: 10, plan: null, status: "done" } as any]
+    };
+    render(Dashboard, { props: { feed: doneFeed, undoIds: new Set(["t1"]), onUndo } });
+    await fireEvent.click(screen.getByRole("button", { name: "Undo complete Pay rent" }));
+    expect(onUndo).toHaveBeenCalledWith("t1");
+  });
+
+  it("shows no Undo on a done card outside the undo window", () => {
+    const doneFeed: Feed = {
+      events: [],
+      active: [{ id: "t1", task: "Pay rent", category: "admin", sat_for_hours: 10, plan: null, status: "done" } as any]
+    };
+    render(Dashboard, { props: { feed: doneFeed } });
+    expect(screen.queryByRole("button", { name: /undo/i })).toBeNull();
+  });
 });

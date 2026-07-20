@@ -115,15 +115,23 @@
 {/if}
 
 <style>
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+  /* minmax(0,1fr): plain 1fr tracks size to min-content, so one long task name
+     could make columns unequal — pinning min to 0 keeps every card the same width.
+     align-items:start lets each card keep its own height, Keep-style. */
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+          margin-bottom: 18px; align-items: start; }
   .card { display: block; padding: 12px 14px; border-radius: 14px;
           border: 1px solid rgba(128, 128, 128, 0.35); text-decoration: none; color: inherit;
-          position: relative; }
+          position: relative; min-width: 0; }
   .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
                margin-bottom: 8px; }
-  .card-name { font-weight: 600; font-size: 16px; }
+  .card-name { font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis;
+               white-space: nowrap; min-width: 0; }
   .count { font-size: 12px; opacity: 0.7; flex: none; }
-  .preview { list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.7; }
+  /* Keep-style cap: previews never grow a card past ~6 rows; the +N more line
+     below the list carries the overflow signal */
+  .preview { list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.7;
+             max-height: 140px; overflow: hidden; }
   .preview li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .more { font-size: 12px; margin-top: 4px; }
   .empty { font-size: 13px; }

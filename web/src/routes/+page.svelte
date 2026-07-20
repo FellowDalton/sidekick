@@ -21,7 +21,41 @@
     }
   }
 
-  async function onComplete(id: string) {
+  // ── undo window: a Done tap is held locally for UNDO_MS before anything is
+  //    sent; Undo cancels it and the ledger never hears about it ──
+  const UNDO_MS = 5000;
+  let undoTimers = $state<Record<string, ReturnType<typeof setTimeout>>>({});
+  const undoIds = $derived(new Set(Object.keys(undoTimers)));
+
+  // tasks inside their undo window render as done (struck card with an Undo
+  // button) even though the completion hasn't been sent yet
+  const viewFeed = $derived(feed && {
+    ...feed,
+    active: feed.active.map(t => undoTimers[t.id] ? { ...t, status: "done" as const } : t)
+  });
+
+  function onComplete(id: string) {
+    if (!feed || pending.has(id) || undoTimers[id]) return;
+    if (!feed.active.some(t => t.id === id)) return;
+    const timer = setTimeout(() => commitComplete(id), UNDO_MS);
+    undoTimers = { ...undoTimers, [id]: timer };
+  }
+
+  function onUndo(id: string) {
+    const timer = undoTimers[id];
+    if (!timer) return;
+    clearTimeout(timer);
+    const { [id]: _, ...rest } = undoTimers;
+    undoTimers = rest;                                     // card flips back; server never contacted
+  }
+
+  async function commitComplete(id: string) {
+    const held = undoTimers[id];
+    if (held) {
+      clearTimeout(held);                                  // no-op on natural expiry; needed for flush
+      const { [id]: _, ...rest } = undoTimers;
+      undoTimers = rest;
+    }
     if (!feed || pending.has(id)) return;
     const removed = feed.active.find(t => t.id === id);
     if (!removed) return;
@@ -36,6 +70,12 @@
     } finally {
       const next = new Set(pending); next.delete(id); pending = next;
     }
+  }
+
+  function flushUndoTimers() {
+    // leaving the view commits every held tap immediately — the undo window
+    // is a mis-tap guard, not a way to lose completions
+    for (const id of Object.keys(undoTimers)) void commitComplete(id);
   }
 
   // Returns whether the save succeeded — Dashboard.svelte awaits this and only
@@ -116,14 +156,14 @@
     if (!hasToken()) { goto("/settings"); return; }
     load();
   });
-  onDestroy(stopPolling);
+  onDestroy(() => { stopPolling(); flushUndoTimers(); });
 </script>
 
 {#if error}
   <p class="msg-err">{error}</p>
   <button class="btn" onclick={load}>Retry</button>
-{:else if feed}
-  <Dashboard {feed} {onComplete} {pending} {onAgent} {agentJobs} {onDescribe} />
+{:else if viewFeed}
+  <Dashboard feed={viewFeed} {onComplete} {pending} {onAgent} {agentJobs} {onDescribe} {undoIds} {onUndo} />
 {:else}
   <p class="muted">Loading…</p>
 {/if}

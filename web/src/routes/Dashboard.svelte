@@ -7,10 +7,12 @@
 
   let { feed, onComplete = (_id: string) => {}, pending = new Set<string>(),
         onAgent = (_id: string) => {}, agentJobs = {},
-        onDescribe = async (_id: string, _text: string) => true }:
+        onDescribe = async (_id: string, _text: string) => true,
+        undoIds = new Set<string>(), onUndo = (_id: string) => {} }:
     { feed: Feed; onComplete?: (id: string) => void; pending?: Set<string>;
       onAgent?: (id: string) => void; agentJobs?: Record<string, AgentJob>;
-      onDescribe?: (id: string, text: string) => Promise<boolean> } = $props();
+      onDescribe?: (id: string, text: string) => Promise<boolean>;
+      undoIds?: Set<string>; onUndo?: (id: string) => void } = $props();
 
   // ── description display/edit (cards), keyed by task id ──
   let expanded = $state(new Set<string>());
@@ -95,7 +97,12 @@
         </span>
       </div>
       {#if t.status === "done"}
-        <div class="muted done-note">✓ done</div>
+        <div class="muted done-note">✓ done
+          {#if undoIds.has(t.id)}
+            <button class="btn btn-mini" onclick={() => onUndo(t.id)}
+                    aria-label={"Undo complete " + t.task}>Undo</button>
+          {/if}
+        </div>
       {:else}
         {#if t.description}
           {@const isExpanded = expanded.has(t.id)}

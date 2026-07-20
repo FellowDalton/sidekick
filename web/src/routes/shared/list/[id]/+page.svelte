@@ -26,6 +26,11 @@
   let editing = $state(new Set<string>());
   let editText = $state<Record<string, string>>({});
 
+  // ── undo window: a tick is held locally for UNDO_MS before anything is sent;
+  //    a second tap on Undo cancels it and the ledger never hears about it ──
+  const UNDO_MS = 5000;
+  let undoTimers = $state<Record<string, ReturnType<typeof setTimeout>>>({});
+
   const listName = $derived(
     listId === "todos" ? "To-dos" : (feed?.lists ?? []).find(l => l.id === listId)?.name ?? null);
 
@@ -34,7 +39,12 @@
   // sorted newest-first; children are left in feed order underneath.
   const tree = $derived.by(() => {
     if (!feed) return [];
-    const roots = buildTree(feed.active.filter(t => t.shared))
+    // overlay: tasks inside their undo window render as done even though the
+    // completion hasn't been sent yet (and a feed reload can't un-flip them)
+    const overlaid = feed.active
+      .filter(t => t.shared)
+      .map(t => undoTimers[t.id] ? { ...t, status: "done" as const } : t);
+    const roots = buildTree(overlaid)
       .filter(n => (n.task.list ?? "todos") === listId);
     return [...roots].sort((a, b) => (a.task.sat_for_hours ?? 0) - (b.task.sat_for_hours ?? 0));
   });
@@ -113,7 +123,30 @@
     }
   }
 
-  async function tick(id: string) {
+  function tick(id: string) {
+    if (!feed || pending.has(id) || undoTimers[id]) return;
+    if (!feed.active.some(t => t.id === id)) return;
+    // hold the completion locally — the overlay flips the row to done; nothing
+    // is sent until the window passes (or the view is left — see onDestroy)
+    const timer = setTimeout(() => commitTick(id), UNDO_MS);
+    undoTimers = { ...undoTimers, [id]: timer };
+  }
+
+  function undoTick(id: string) {
+    const timer = undoTimers[id];
+    if (!timer) return;
+    clearTimeout(timer);
+    const { [id]: _, ...rest } = undoTimers;
+    undoTimers = rest;                                     // row flips back; server never contacted
+  }
+
+  async function commitTick(id: string) {
+    const held = undoTimers[id];
+    if (held) {
+      clearTimeout(held);                                  // no-op on natural expiry; needed for flush
+      const { [id]: _, ...rest } = undoTimers;
+      undoTimers = rest;
+    }
     if (!feed || pending.has(id)) return;
     const prev = feed;
     if (!prev.active.some(t => t.id === id)) return;
@@ -128,6 +161,12 @@
     } finally {
       const next = new Set(pending); next.delete(id); pending = next;
     }
+  }
+
+  function flushUndoTimers() {
+    // leaving the view commits every held tick immediately — the undo window
+    // is a mis-tap guard, not a way to lose completions
+    for (const id of Object.keys(undoTimers)) void commitTick(id);
   }
 
   // ── agent jobs: breakdown, both roles (unchanged from the old shared page) ──
@@ -176,7 +215,7 @@
     if (!hasToken()) { goto("/settings"); return; }
     load();
   });
-  onDestroy(stopPolling);
+  onDestroy(() => { stopPolling(); flushUndoTimers(); });
 </script>
 
 <a href="/shared" class="muted back">← Lists</a>
@@ -216,6 +255,10 @@
             {#if t.status === "done"}
               <input type="checkbox" checked disabled aria-label={t.task + " — done"} />
               <span class="struck">{t.task}</span>
+              {#if undoTimers[t.id]}
+                <button class="btn btn-mini" onclick={() => undoTick(t.id)}
+                        aria-label={"Undo complete " + t.task}>Undo</button>
+              {/if}
             {:else}
               <input type="checkbox" disabled={pending.has(t.id)}
                      onchange={() => tick(t.id)} aria-label={"Complete " + t.task} />

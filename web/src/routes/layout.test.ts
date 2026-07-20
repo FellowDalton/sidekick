@@ -65,4 +65,22 @@ describe("role-aware layout", () => {
     await new Promise((r) => setTimeout(r, 0));   // let effects flush
     expect(goto).not.toHaveBeenCalled();
   });
+
+  it("leaves role shared alone on a list detail page", async () => {
+    identity.set({ name: "wife", role: "shared" });
+    setPage("/shared/list/groceries");
+    renderLayout();
+    await new Promise((r) => setTimeout(r, 0));   // let effects flush
+    expect(goto).not.toHaveBeenCalled();
+  });
+
+  it("shows only Settings while the role is still unresolved", () => {
+    // identity is null (beforeEach): an unknown role must not surface the
+    // dashboard nav — role shared would see it flash before /me resolves
+    renderLayout();
+    expect(screen.queryByRole("link", { name: "Dashboard" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "New" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Shared" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Settings" })).toBeInTheDocument();
+  });
 });

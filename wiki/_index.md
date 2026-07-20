@@ -2,4 +2,4 @@
 
 # Wiki — reusable memory
 
-- [[harpenden-family-cooling-off|Harpenden family cooling-off]] — Heat-safe family cooling options near Harpenden, with car-free route ranking for parks, splash pads and pools.  ·  updated 2026-07-20
+- [[harpenden-family-cooling-off|Harpenden family cooling-off]] — Heat-safe family cooling and indoor options near Harpenden, with route ranking for parks, splash pads, pools, libraries, museums and soft play.  ·  updated 2026-07-20

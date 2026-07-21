@@ -14,6 +14,9 @@
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => { /* offline shell + push degrade gracefully */ });
     }
+    // ask to be exempted from storage eviction — iOS wiped the saved token once
+    // already (2026-07-21); best-effort, no permission prompt on modern engines
+    void navigator.storage?.persist?.().catch(() => {});
   });
 
   // resolve the token's role whenever the token changes (no-op for a repeat token)

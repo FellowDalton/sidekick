@@ -1,11 +1,20 @@
 <script lang="ts">
   import "../app.css";
+  import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
   import { settings } from "$lib/settings";
   import { identity, loadIdentity } from "$lib/role";
   let { children } = $props();
   const is = (p: string) => $page.url.pathname === p;
+
+  // The PWA plugin GENERATES sw.js but does not register it — without this,
+  // serviceWorker.ready never resolves and web push can never subscribe.
+  onMount(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => { /* offline shell + push degrade gracefully */ });
+    }
+  });
 
   // resolve the token's role whenever the token changes (no-op for a repeat token)
   $effect(() => { loadIdentity($settings.token); });

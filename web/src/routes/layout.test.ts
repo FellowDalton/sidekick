@@ -74,6 +74,16 @@ describe("role-aware layout", () => {
     expect(goto).not.toHaveBeenCalled();
   });
 
+  it("registers the service worker on mount when the API exists", async () => {
+    const register = vi.fn(async () => ({}));
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true, value: { register }
+    });
+    renderLayout();
+    await waitFor(() => expect(register).toHaveBeenCalledWith("/sw.js"));
+    delete (navigator as any).serviceWorker;
+  });
+
   it("shows only Settings while the role is still unresolved", () => {
     // identity is null (beforeEach): an unknown role must not surface the
     // dashboard nav — role shared would see it flash before /me resolves

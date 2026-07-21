@@ -11,11 +11,15 @@
 
   // MUST run inside the click handler: iOS only grants Notification permission
   // from a user gesture, and only in the installed (Home-Screen) PWA.
+  let pushError = $state("");
+
   async function onEnablePush() {
     pushState = "working";
+    pushError = "";
     try {
       pushState = await enablePush();
-    } catch {
+    } catch (e) {
+      pushError = e instanceof Error ? e.message : "";
       pushState = "error";
     }
   }
@@ -44,6 +48,6 @@
 {:else if pushState === "unsupported"}
   <p class="muted">This browser can't receive push. On iPhone, add Sidekick to the Home Screen and open it from there first.</p>
 {:else if pushState === "error"}
-  <p class="muted">Couldn't subscribe — check the API token, then try again.</p>
+  <p class="muted">Couldn't subscribe{pushError ? ` (${pushError})` : " — check the API token, then try again."}</p>
 {/if}
 <p class="muted">One nudge a day at 09:00, and only when something's genuinely stalled.</p>

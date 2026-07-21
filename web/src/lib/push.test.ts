@@ -20,12 +20,18 @@ function mockApiFetch() {
   });
 }
 
-function stubPushEnv(permission: NotificationPermission = "granted") {
+function stubPushEnv(permission: NotificationPermission = "granted",
+                     existingSub: { toJSON: () => object } | null = null,
+                     ready?: Promise<unknown>) {
   vi.stubGlobal("Notification", { requestPermission: vi.fn(async () => permission) });
   vi.stubGlobal("PushManager", function () { /* presence check only */ });
   Object.defineProperty(navigator, "serviceWorker", {
     configurable: true,
-    value: { ready: Promise.resolve({ pushManager: { subscribe } }) }
+    value: {
+      ready: ready ?? Promise.resolve({
+        pushManager: { subscribe, getSubscription: vi.fn(async () => existingSub) }
+      })
+    }
   });
 }
 
@@ -62,5 +68,30 @@ describe("enablePush", () => {
   it("returns 'unsupported' when the push APIs are missing (plain jsdom)", async () => {
     expect(pushSupported()).toBe(false);
     expect(await enablePush()).toBe("unsupported");
+  });
+
+  it("reuses an existing subscription instead of subscribing again", async () => {
+    // a previous attempt may have subscribed but died before reaching the
+    // server — the retry must just re-POST it, not call subscribe() again
+    stubPushEnv("granted", { toJSON: () => SUB_JSON });
+    const f = mockApiFetch();
+    vi.stubGlobal("fetch", f);
+    expect(await enablePush()).toBe("enabled");
+    expect(subscribe).not.toHaveBeenCalled();
+    expect(f.mock.calls.find(([u]) => u === "/api/push/subscribe")).toBeDefined();
+  });
+
+  it("rejects with a step-labelled error instead of hanging forever", async () => {
+    vi.useFakeTimers();
+    try {
+      stubPushEnv("granted", null, new Promise(() => {}));   // SW never readies
+      vi.stubGlobal("fetch", mockApiFetch());
+      const p = enablePush();
+      const guard = expect(p).rejects.toThrow(/service worker/);
+      await vi.advanceTimersByTimeAsync(10000);
+      await guard;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

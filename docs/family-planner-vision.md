@@ -41,9 +41,21 @@ to the vault and pushed. The VPS never holds bank tokens or school logins.
   shared role). She should never need a new tool.
 - The agent: does legwork (research, breakdown, Viggo triage, imports).
 
-## Open inputs
+## Chore-year workbook (read 2026-07-24 — link now shared)
 
-- [ ] Chore Excel access (401 — not link-shared yet).
+Google Sheet "ÅRSHJUL - DALTONS", four tabs; this IS the recurrence model's shape:
+- **Årshjul** (~90 rows): Måned | Kategori | Opgave | Status | Noter — month-granular
+  yearly tasks (insurance review in January, winter-clothes check, holiday planning…).
+- **Tilbagevendende Opgaver**: quarterly jobs with Q1–Q4 checkboxes (descale coffee
+  machine, dishwasher, shower lime…).
+- **Ugentlige opgaver**: daily/weekly routines with Kategori + **Ansvarlig** (owner —
+  blank today; import can leave unassigned).
+- **Noter og Tips**: their planning strategy in prose (quarterly weekend session,
+  family-calendar reminders, coordinate with partner).
+→ Recurrence primitive must express: yearly-by-month, quarterly, weekly, daily;
+  category; optional owner. Danish task titles — keep unicode slugs (already fixed).
+
+## Open inputs
 - [ ] Pengero photos (after holiday) + a kitchen-table description of the ritual.
 - [ ] Which bank, and whether it offers a personal API / PSD2 route worth the
       weight vs CSV export.
